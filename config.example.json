@@ -1,0 +1,37 @@
+{
+  "ha": {
+    "url": "192.168.1.20",
+    "port": 8123,
+    "token": "YOUR_LONG_LIVED_ACCESS_TOKEN"
+  },
+  "rooms": [
+    {
+      "id": "wohnzimmer",
+      "name": "Wohnzimmer",
+      "icon": "🛋️",
+      "devices": [
+        {
+          "entity_id": "switch.example_light",
+          "name": "Deckenleuchte",
+          "type": "switch"
+        },
+        {
+          "entity_id": "light.example_dimmer",
+          "name": "Stehlampe",
+          "type": "light"
+        },
+        {
+          "entity_id": "cover.example_shutter",
+          "name": "Jalousie",
+          "type": "cover"
+        },
+        {
+          "entity_id": "sensor.example_temperature",
+          "name": "Temperatur",
+          "type": "sensor",
+          "unit": "°C"
+        }
+      ]
+    }
+  ]
+}

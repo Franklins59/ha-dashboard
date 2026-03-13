@@ -1,0 +1,395 @@
+/* === franklins-dash === */
+
+/* --- Reset --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* --- Theme variables --- */
+:root {
+  --transition-theme: background 0.6s ease, color 0.6s ease, border-color 0.4s ease;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --bg: #111111;
+  --bg-header: #161616;
+  --surface: #1e1e1e;
+  --surface-hover: #282828;
+  --border: #2a2a2a;
+  --text: #e8e8e8;
+  --text-dim: #777;
+  --text-heading: #999;
+  --accent: #3ddc84;
+  --accent-glow: rgba(61, 220, 132, 0.12);
+  --accent-cover: #5ba8f5;
+  --accent-cover-glow: rgba(91, 168, 245, 0.10);
+  --accent-sensor: #fbbf24;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --logo-filter: none;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg: #f0f1f3;
+  --bg-header: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f5f5f5;
+  --border: #e0e0e0;
+  --text: #1a1a1a;
+  --text-dim: #888;
+  --text-heading: #666;
+  --accent: #1aab5c;
+  --accent-glow: rgba(26, 171, 92, 0.10);
+  --accent-cover: #3b82f6;
+  --accent-cover-glow: rgba(59, 130, 246, 0.08);
+  --accent-sensor: #d97706;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08);
+  --logo-filter: brightness(0.7);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  transition: var(--transition-theme);
+}
+
+/* --- Header --- */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1.5rem;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  transition: var(--transition-theme);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.header-logo {
+  height: 30px;
+  width: auto;
+  filter: var(--logo-filter);
+}
+
+.header-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.header-title span {
+  font-weight: 300;
+  color: var(--text-dim);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-clock {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  transition: all 0.2s;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.3s;
+}
+
+.status-dot.connected {
+  background: var(--accent);
+}
+
+/* --- Content --- */
+.content {
+  padding: 1.2rem 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* --- Rooms grid: 2 columns for landscape --- */
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .rooms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Room --- */
+.room {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  box-shadow: var(--shadow);
+  transition: var(--transition-theme);
+}
+
+.room-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-heading);
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* --- Device Grid --- */
+.devices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 0.6rem;
+}
+
+/* --- Device Card (base) --- */
+.device {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.device-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.device-name {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.device-state {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+/* --- Toggle cards (switch / light) --- */
+.device.toggleable {
+  cursor: pointer;
+}
+
+.device.toggleable:hover {
+  background: var(--surface-hover);
+}
+
+.device.toggleable:active {
+  transform: scale(0.97);
+}
+
+.device.on {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.device.on .device-state {
+  color: var(--accent);
+}
+
+/* --- Dimmer --- */
+.dimmer-row {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dimmer-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+}
+
+.dimmer-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+.dimmer-value {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  min-width: 2.2em;
+  text-align: right;
+}
+
+/* --- Cover --- */
+.device.cover-card.open {
+  border-color: var(--accent-cover);
+  background: var(--accent-cover-glow);
+}
+
+.cover-buttons {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+.cover-btn {
+  flex: 1;
+  padding: 0.35rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.cover-btn:hover {
+  border-color: var(--accent-cover);
+  color: var(--accent-cover);
+}
+
+.cover-btn:active {
+  transform: scale(0.95);
+}
+
+.cover-position {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.cover-pos-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+}
+
+.cover-pos-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-cover);
+  cursor: pointer;
+}
+
+.cover-pos-value {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  min-width: 2.2em;
+  text-align: right;
+}
+
+/* --- Sensor --- */
+.sensor-value {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+  color: var(--accent-sensor);
+}
+
+.sensor-unit {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+/* --- Overlay --- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  z-index: 100;
+  transition: opacity 0.4s;
+}
+
+.overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.overlay-logo {
+  height: 48px;
+  opacity: 0.6;
+}
+
+.overlay-text {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.error-msg {
+  color: #f87171;
+  text-align: center;
+  line-height: 1.6;
+}

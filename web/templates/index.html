@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>franklins dash</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-theme="dark">
+
+  <!-- Connection overlay -->
+  <div class="overlay" id="overlay">
+    <img src="/static/logo.png" class="overlay-logo" alt="">
+    <span class="overlay-text" id="overlay-text">Verbinde mit Home Assistant...</span>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <img src="/static/logo.png" class="header-logo" alt="franklins">
+      <div class="header-title">dash</div>
+    </div>
+    <div class="header-right">
+      <span class="header-clock" id="clock"></span>
+      <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
+      <div class="status-bar">
+        <span id="status-text">Getrennt</span>
+        <div class="status-dot" id="status-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="rooms-grid" id="rooms"></div>
+  </div>
+
+  <script>
+    // --- State ---
+    let ws = null;
+    let config = null;
+    let msgId = 1;
+    let entityStates = {};
+    let entityAttrs = {};
+    let themeMode = "auto";
+
+    const ICONS = {
+      switch:  { on: "💡", off: "🔅" },
+      light:   { on: "💡", off: "🔅" },
+      cover:   { on: "🪟", off: "🪟" },
+      sensor_temp: "🌡️",
+      sensor_humidity: "💧",
+      sensor_default: "📊"
+    };
+
+    // === THEME ===
+    function getAutoTheme() {
+      const h = new Date().getHours();
+      return (h >= 7 && h < 20) ? "light" : "dark";
+    }
+
+    function applyTheme() {
+      const theme = themeMode === "auto" ? getAutoTheme() : themeMode;
+      document.body.dataset.theme = theme;
+      document.getElementById("theme-toggle").textContent =
+        theme === "dark" ? "☀️" : "🌙";
+    }
+
+    function cycleTheme() {
+      if (themeMode === "auto") themeMode = "dark";
+      else if (themeMode === "dark") themeMode = "light";
+      else themeMode = "auto";
+      applyTheme();
+    }
+
+    document.getElementById("theme-toggle").addEventListener("click", cycleTheme);
+    setInterval(applyTheme, 60000);
+    applyTheme();
+
+    // === CLOCK ===
+    function updateClock() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      document.getElementById("clock").textContent = `${hh}:${mm}`;
+    }
+    updateClock();
+    setInterval(updateClock, 10000);
+
+    // === BOOT ===
+    async function init() {
+      try {
+        const res = await fetch("/api/config");
+        config = await res.json();
+        renderRooms();
+        connectHA();
+      } catch (e) {
+        showError("Konfiguration konnte nicht geladen werden.");
+      }
+    }
+
+    // === RENDER ===
+    function sensorIcon(dev) {
+      if (dev.unit === "°C" || dev.unit === "°F") return ICONS.sensor_temp;
+      if (dev.unit === "%") return ICONS.sensor_humidity;
+      return ICONS.sensor_default;
+    }
+
+    function renderRooms() {
+      const container = document.getElementById("rooms");
+      container.innerHTML = "";
+
+      for (const room of config.rooms) {
+        const roomEl = document.createElement("div");
+        roomEl.className = "room";
+        roomEl.innerHTML = `<div class="room-title">${room.icon || ""} ${room.name}</div>`;
+
+        const grid = document.createElement("div");
+        grid.className = "devices";
+
+        for (const dev of room.devices) {
+          let card;
+          if (dev.type === "switch" || dev.type === "light") card = createToggleCard(dev);
+          else if (dev.type === "cover") card = createCoverCard(dev);
+          else if (dev.type === "sensor") card = createSensorCard(dev);
+          if (card) grid.appendChild(card);
+        }
+
+        roomEl.appendChild(grid);
+        container.appendChild(roomEl);
+      }
+    }
+
+    function createToggleCard(dev) {
+      const card = document.createElement("div");
+      card.className = "device toggleable";
+      card.id = `dev-${dev.entity_id}`;
+      card.dataset.entityId = dev.entity_id;
+      card.dataset.type = dev.type;
+
+      const icons = ICONS[dev.type] || ICONS.switch;
+      card.innerHTML = `
+        <div class="device-icon">${icons.off}</div>
+        <div class="device-name">${dev.name}</div>
+        <div class="device-state">—</div>
+        ${dev.type === "light" ? `
+        <div class="dimmer-row" style="display:none">
+          <input type="range" class="dimmer-slider" min="0" max="255" value="0">
+          <span class="dimmer-value">0%</span>
+        </div>` : ""}
+      `;
+
+      card.addEventListener("click", (e) => {
+        if (e.target.classList.contains("dimmer-slider")) return;
+        toggleDevice(dev.entity_id, dev.type);
+      });
+
+      if (dev.type === "light") {
+        const slider = card.querySelector(".dimmer-slider");
+        if (slider) {
+          slider.addEventListener("input", (e) => {
+            card.querySelector(".dimmer-value").textContent =
+              Math.round(parseInt(e.target.value) / 255 * 100) + "%";
+          });
+          slider.addEventListener("change", (e) => {
+            setBrightness(dev.entity_id, parseInt(e.target.value));
+          });
+        }
+      }
+
+      return card;
+    }
+
+    function createCoverCard(dev) {
+      const card = document.createElement("div");
+      card.className = "device cover-card";
+      card.id = `dev-${dev.entity_id}`;
+      card.dataset.entityId = dev.entity_id;
+      card.dataset.type = "cover";
+
+      card.innerHTML = `
+        <div class="device-icon">🪟</div>
+        <div class="device-name">${dev.name}</div>
+        <div class="device-state">—</div>
+        <div class="cover-buttons">
+          <button class="cover-btn" data-action="open">▲</button>
+          <button class="cover-btn" data-action="stop">■</button>
+          <button class="cover-btn" data-action="close">▼</button>
+        </div>
+        <div class="cover-position">
+          <input type="range" class="cover-pos-slider" min="0" max="100" value="0">
+          <span class="cover-pos-value">—</span>
+        </div>
+      `;
+
+      card.querySelectorAll(".cover-btn").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          coverAction(dev.entity_id, btn.dataset.action);
+        });
+      });
+
+      const slider = card.querySelector(".cover-pos-slider");
+      slider.addEventListener("change", (e) => {
+        setCoverPosition(dev.entity_id, parseInt(e.target.value));
+      });
+      slider.addEventListener("input", (e) => {
+        card.querySelector(".cover-pos-value").textContent = e.target.value + "%";
+      });
+
+      return card;
+    }
+
+    function createSensorCard(dev) {
+      const card = document.createElement("div");
+      card.className = "device sensor-card";
+      card.id = `dev-${dev.entity_id}`;
+      card.dataset.entityId = dev.entity_id;
+      card.dataset.type = "sensor";
+      card.dataset.unit = dev.unit || "";
+
+      card.innerHTML = `
+        <div class="device-icon">${sensorIcon(dev)}</div>
+        <div class="device-name">${dev.name}</div>
+        <div class="sensor-value">—<span class="sensor-unit"> ${dev.unit || ""}</span></div>
+      `;
+
+      return card;
+    }
+
+    // === HA WEBSOCKET ===
+    function connectHA() {
+      const haUrl = `ws://${config.ha.url}:${config.ha.port}/api/websocket`;
+      ws = new WebSocket(haUrl);
+
+      ws.onopen = () => console.log("WS connected");
+      ws.onmessage = (e) => handleMessage(JSON.parse(e.data));
+      ws.onclose = () => {
+        setStatus(false);
+        showError("Verbindung zu HA verloren. Versuche erneut...");
+        setTimeout(connectHA, 5000);
+      };
+      ws.onerror = () => setStatus(false);
+    }
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case "auth_required":
+          ws.send(JSON.stringify({ type: "auth", access_token: config.ha.token }));
+          break;
+        case "auth_ok":
+          setStatus(true);
+          hideOverlay();
+          fetchStates();
+          subscribeEvents();
+          break;
+        case "auth_invalid":
+          showError("Token ungültig. Bitte config.json prüfen.");
+          break;
+        case "result":
+          if (msg.result && Array.isArray(msg.result)) {
+            for (const e of msg.result) {
+              entityStates[e.entity_id] = e.state;
+              entityAttrs[e.entity_id] = e.attributes || {};
+              updateDeviceUI(e.entity_id, e.state, e.attributes);
+            }
+          }
+          break;
+        case "event":
+          if (msg.event?.event_type === "state_changed" && msg.event.data?.new_state) {
+            const d = msg.event.data;
+            entityStates[d.entity_id] = d.new_state.state;
+            entityAttrs[d.entity_id] = d.new_state.attributes || {};
+            updateDeviceUI(d.entity_id, d.new_state.state, d.new_state.attributes);
+          }
+          break;
+      }
+    }
+
+    function fetchStates() {
+      ws.send(JSON.stringify({ id: msgId++, type: "get_states" }));
+    }
+
+    function subscribeEvents() {
+      ws.send(JSON.stringify({ id: msgId++, type: "subscribe_events", event_type: "state_changed" }));
+    }
+
+    // === ACTIONS ===
+    function toggleDevice(entityId, type) {
+      const domain = type === "light" ? "light" : "switch";
+      const service = entityStates[entityId] === "on" ? "turn_off" : "turn_on";
+      callService(domain, service, entityId);
+    }
+
+    function setBrightness(entityId, brightness) {
+      callService("light", "turn_on", entityId, { brightness });
+    }
+
+    function coverAction(entityId, action) {
+      callService("cover", { open: "open_cover", close: "close_cover", stop: "stop_cover" }[action], entityId);
+    }
+
+    function setCoverPosition(entityId, position) {
+      callService("cover", "set_cover_position", entityId, { position });
+    }
+
+    function callService(domain, service, entityId, data) {
+      const msg = { id: msgId++, type: "call_service", domain, service, target: { entity_id: entityId } };
+      if (data) msg.service_data = data;
+      ws.send(JSON.stringify(msg));
+    }
+
+    // === UI UPDATES ===
+    function updateDeviceUI(entityId, state, attrs) {
+      const card = document.getElementById(`dev-${entityId}`);
+      if (!card) return;
+      const type = card.dataset.type;
+      attrs = attrs || {};
+
+      if (type === "switch" || type === "light") updateToggleUI(card, type, state, attrs);
+      else if (type === "cover") updateCoverUI(card, state, attrs);
+      else if (type === "sensor") updateSensorUI(card, state);
+    }
+
+    function updateToggleUI(card, type, state, attrs) {
+      const icons = ICONS[type] || ICONS.switch;
+      const isOn = state === "on";
+      card.className = `device toggleable${isOn ? " on" : ""}`;
+      card.querySelector(".device-icon").textContent = isOn ? icons.on : icons.off;
+      card.querySelector(".device-state").textContent = isOn ? "Ein" : "Aus";
+
+      if (type === "light") {
+        const row = card.querySelector(".dimmer-row");
+        const slider = card.querySelector(".dimmer-slider");
+        if (row && slider) {
+          if (isOn && attrs.brightness !== undefined) {
+            row.style.display = "flex";
+            slider.value = attrs.brightness;
+            card.querySelector(".dimmer-value").textContent =
+              Math.round(attrs.brightness / 255 * 100) + "%";
+          } else {
+            row.style.display = "none";
+          }
+        }
+      }
+    }
+
+    function updateCoverUI(card, state, attrs) {
+      const pos = attrs.current_position;
+      card.className = `device cover-card${state === "open" ? " open" : ""}`;
+
+      const labels = { open: "Offen", closed: "Geschlossen", opening: "Öffnet...", closing: "Schliesst..." };
+      card.querySelector(".device-state").textContent = labels[state] || "—";
+
+      if (pos !== undefined && pos !== null) {
+        card.querySelector(".cover-pos-slider").value = pos;
+        card.querySelector(".cover-pos-value").textContent = pos + "%";
+      }
+    }
+
+    function updateSensorUI(card, state) {
+      const unit = card.dataset.unit || "";
+      const valEl = card.querySelector(".sensor-value");
+      if (state === "unavailable" || state === "unknown") {
+        valEl.innerHTML = `—<span class="sensor-unit"> ${unit}</span>`;
+      } else {
+        const num = parseFloat(state);
+        valEl.innerHTML = `${isNaN(num) ? state : num.toFixed(1)}<span class="sensor-unit"> ${unit}</span>`;
+      }
+    }
+
+    // === HELPERS ===
+    function setStatus(connected) {
+      document.getElementById("status-dot").className = `status-dot${connected ? " connected" : ""}`;
+      document.getElementById("status-text").textContent = connected ? "Verbunden" : "Getrennt";
+    }
+
+    function hideOverlay() {
+      document.getElementById("overlay").classList.add("hidden");
+    }
+
+    function showError(text) {
+      const el = document.getElementById("overlay-text");
+      el.className = "error-msg";
+      el.textContent = text;
+      document.getElementById("overlay").classList.remove("hidden");
+    }
+
+    // === GO ===
+    init();
+  </script>
+</body>
+</html>
