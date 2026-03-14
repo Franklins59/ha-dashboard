@@ -1,5 +1,6 @@
 # Secrets - NEVER commit
 config.json
+settings.json
 
 # Python
 venv/

@@ -21,11 +21,15 @@
   <div class="header">
     <div class="header-left">
       <img src="/static/logo.png" class="header-logo" alt="franklins">
-      <div class="header-title">dash</div>
+      <div class="header-title">Dashboard</div>
+    </div>
+    <div class="header-center">
+      <div class="header-building" id="building-name"></div>
     </div>
     <div class="header-right">
       <span class="header-clock" id="clock"></span>
       <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
+      <a href="/settings" class="theme-toggle" title="Einstellungen">⚙️</a>
       <div class="status-bar">
         <span id="status-text">Getrennt</span>
         <div class="status-dot" id="status-dot"></div>
@@ -35,22 +39,30 @@
 
   <!-- Content -->
   <div class="content">
-    <div class="rooms-grid" id="rooms"></div>
+    <nav class="sidebar" id="sidebar"></nav>
+    <div class="main">
+      <div class="rooms-grid" id="rooms"></div>
+    </div>
   </div>
 
   <script>
     // --- State ---
     let ws = null;
+    let settings = null;
     let config = null;
     let msgId = 1;
     let entityStates = {};
     let entityAttrs = {};
     let themeMode = "auto";
+    let activeGroup = null;
 
     const ICONS = {
       switch:  { on: "💡", off: "🔅" },
       light:   { on: "💡", off: "🔅" },
       cover:   { on: "🪟", off: "🪟" },
+      input_boolean: { on: "✅", off: "⬜" },
+      automation: { on: "✅", off: "⬜" },
+      scene: "🎬",
       sensor_temp: "🌡️",
       sensor_humidity: "💧",
       sensor_default: "📊"
@@ -93,13 +105,73 @@
     // === BOOT ===
     async function init() {
       try {
-        const res = await fetch("/api/config");
-        config = await res.json();
+        const [settingsRes, configRes] = await Promise.all([
+          fetch("/api/settings"),
+          fetch("/api/config")
+        ]);
+        settings = await settingsRes.json();
+        config = await configRes.json();
+
+        // Apply settings
+        document.getElementById("building-name").textContent = settings.building || "";
+        if (settings.theme) themeMode = settings.theme;
+        applyTheme();
+
+        // Set default group (first in list)
+        if (config.groups && config.groups.length > 0) {
+          activeGroup = config.groups[0].id;
+        }
+
+        renderSidebar();
         renderRooms();
         connectHA();
       } catch (e) {
         showError("Konfiguration konnte nicht geladen werden.");
       }
+    }
+
+    // === SIDEBAR ===
+    function renderSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      sidebar.innerHTML = "";
+
+      if (!config.groups || config.groups.length === 0) {
+        sidebar.style.display = "none";
+        return;
+      }
+
+      for (const group of config.groups) {
+        const btn = document.createElement("button");
+        btn.className = `sidebar-btn${group.id === activeGroup ? " active" : ""}`;
+        btn.dataset.groupId = group.id;
+        btn.innerHTML = `
+          <span class="sidebar-icon">${group.icon || ""}</span>
+          <span class="sidebar-label">${group.name}</span>
+        `;
+        btn.addEventListener("click", () => selectGroup(group.id));
+        sidebar.appendChild(btn);
+      }
+    }
+
+    function selectGroup(groupId) {
+      activeGroup = groupId;
+      // Update sidebar active state
+      document.querySelectorAll(".sidebar-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.groupId === groupId);
+      });
+      renderRooms();
+      // Re-apply current states to rendered cards
+      for (const entityId in entityStates) {
+        updateDeviceUI(entityId, entityStates[entityId], entityAttrs[entityId]);
+      }
+    }
+
+    function getVisibleRooms() {
+      if (!config.groups || !activeGroup) return config.rooms;
+      const group = config.groups.find(g => g.id === activeGroup);
+      if (!group) return config.rooms;
+      if (group.rooms.includes("*")) return config.rooms;
+      return config.rooms.filter(r => group.rooms.includes(r.id));
     }
 
     // === RENDER ===
@@ -112,8 +184,9 @@
     function renderRooms() {
       const container = document.getElementById("rooms");
       container.innerHTML = "";
+      const visibleRooms = getVisibleRooms();
 
-      for (const room of config.rooms) {
+      for (const room of visibleRooms) {
         const roomEl = document.createElement("div");
         roomEl.className = "room";
         roomEl.innerHTML = `<div class="room-title">${room.icon || ""} ${room.name}</div>`;
@@ -124,8 +197,10 @@
         for (const dev of room.devices) {
           let card;
           if (dev.type === "switch" || dev.type === "light") card = createToggleCard(dev);
+          else if (dev.type === "input_boolean" || dev.type === "automation") card = createToggleCard(dev);
           else if (dev.type === "cover") card = createCoverCard(dev);
           else if (dev.type === "sensor") card = createSensorCard(dev);
+          else if (dev.type === "scene") card = createSceneCard(dev);
           if (card) grid.appendChild(card);
         }
 
@@ -231,9 +306,32 @@
       return card;
     }
 
+    function createSceneCard(dev) {
+      const card = document.createElement("div");
+      card.className = "device scene-card";
+      card.id = `dev-${dev.entity_id}`;
+      card.dataset.entityId = dev.entity_id;
+      card.dataset.type = "scene";
+
+      card.innerHTML = `
+        <div class="device-icon">${dev.icon || ICONS.scene}</div>
+        <div class="device-name">${dev.name}</div>
+        <div class="device-state">Antippen</div>
+      `;
+
+      card.addEventListener("click", () => {
+        activateScene(dev.entity_id);
+        // Visual feedback
+        card.classList.add("activated");
+        setTimeout(() => card.classList.remove("activated"), 800);
+      });
+
+      return card;
+    }
+
     // === HA WEBSOCKET ===
     function connectHA() {
-      const haUrl = `ws://${config.ha.url}:${config.ha.port}/api/websocket`;
+      const haUrl = `ws://${settings.ha.url}:${settings.ha.port}/api/websocket`;
       ws = new WebSocket(haUrl);
 
       ws.onopen = () => console.log("WS connected");
@@ -249,7 +347,7 @@
     function handleMessage(msg) {
       switch (msg.type) {
         case "auth_required":
-          ws.send(JSON.stringify({ type: "auth", access_token: config.ha.token }));
+          ws.send(JSON.stringify({ type: "auth", access_token: settings.ha.token }));
           break;
         case "auth_ok":
           setStatus(true);
@@ -290,9 +388,18 @@
 
     // === ACTIONS ===
     function toggleDevice(entityId, type) {
-      const domain = type === "light" ? "light" : "switch";
-      const service = entityStates[entityId] === "on" ? "turn_off" : "turn_on";
-      callService(domain, service, entityId);
+      const domainMap = { light: "light", switch: "switch", input_boolean: "input_boolean", automation: "automation" };
+      const domain = domainMap[type] || "switch";
+      if (type === "input_boolean") {
+        callService("input_boolean", "toggle", entityId);
+      } else {
+        const service = entityStates[entityId] === "on" ? "turn_off" : "turn_on";
+        callService(domain, service, entityId);
+      }
+    }
+
+    function activateScene(entityId) {
+      callService("scene", "turn_on", entityId);
     }
 
     function setBrightness(entityId, brightness) {
@@ -320,7 +427,7 @@
       const type = card.dataset.type;
       attrs = attrs || {};
 
-      if (type === "switch" || type === "light") updateToggleUI(card, type, state, attrs);
+      if (type === "switch" || type === "light" || type === "input_boolean" || type === "automation") updateToggleUI(card, type, state, attrs);
       else if (type === "cover") updateCoverUI(card, state, attrs);
       else if (type === "sensor") updateSensorUI(card, state);
     }
@@ -330,7 +437,12 @@
       const isOn = state === "on";
       card.className = `device toggleable${isOn ? " on" : ""}`;
       card.querySelector(".device-icon").textContent = isOn ? icons.on : icons.off;
-      card.querySelector(".device-state").textContent = isOn ? "Ein" : "Aus";
+
+      if (type === "input_boolean" || type === "automation") {
+        card.querySelector(".device-state").textContent = isOn ? "Aktiv" : "Inaktiv";
+      } else {
+        card.querySelector(".device-state").textContent = isOn ? "Ein" : "Aus";
+      }
 
       if (type === "light") {
         const row = card.querySelector(".dimmer-row");

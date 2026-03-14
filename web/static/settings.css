@@ -1,0 +1,349 @@
+/* === Settings page === */
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font-size: 1.2rem;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.back-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Tabs --- */
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1.5rem;
+  background: var(--bg-header);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  padding: 0.8rem 1.2rem;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* --- Tab content --- */
+.tab-content {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+/* --- Panel sections --- */
+.panel-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.panel-section h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-heading);
+  margin-bottom: 0.8rem;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: 0.8rem;
+}
+
+/* --- Forms --- */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.form-row label {
+  min-width: 100px;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.form-row input,
+.form-row select {
+  flex: 1;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--accent);
+}
+
+.form-row select {
+  cursor: pointer;
+}
+
+/* --- Buttons --- */
+.btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #111;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  color: #111;
+}
+
+.btn-small {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.5rem;
+}
+
+/* --- Results --- */
+.test-result,
+.save-result {
+  font-size: 0.78rem;
+  transition: all 0.2s;
+}
+
+.test-result.success,
+.save-result.success {
+  color: var(--accent);
+}
+
+.test-result.error,
+.save-result.error {
+  color: #f87171;
+}
+
+/* --- Entity Browser --- */
+.entity-toolbar {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.entity-toolbar input {
+  flex: 1;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.entity-toolbar input:focus {
+  border-color: var(--accent);
+}
+
+.entity-toolbar select {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.entity-stats {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+}
+
+.entity-list {
+  margin-top: 0.8rem;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.entity-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.entity-placeholder.error {
+  color: #f87171;
+}
+
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.78rem;
+}
+
+.entity-row:last-child {
+  border-bottom: none;
+}
+
+.entity-row:hover {
+  background: var(--accent-glow);
+}
+
+.entity-row.copied {
+  background: var(--accent-glow);
+}
+
+.entity-domain {
+  min-width: 90px;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  text-align: center;
+  font-family: monospace;
+}
+
+.entity-id {
+  flex: 2;
+  font-family: monospace;
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.entity-name {
+  flex: 2;
+  color: var(--text-dim);
+}
+
+.entity-state {
+  min-width: 70px;
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.btn-copy {
+  padding: 0.15rem 0.3rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.entity-row:hover .btn-copy {
+  opacity: 1;
+}
+
+/* --- Config Editor --- */
+.config-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.config-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#config-editor {
+  width: 100%;
+  min-height: 500px;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  tab-size: 2;
+}
+
+#config-editor:focus {
+  border-color: var(--accent);
+}

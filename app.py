@@ -4,7 +4,8 @@ Serves a web UI that communicates directly with HA's WebSocket API.
 """
 
 import json
-from flask import Flask, render_template, jsonify
+import requests
+from flask import Flask, render_template, jsonify, request
 
 app = Flask(
     __name__,
@@ -12,9 +13,17 @@ app = Flask(
     static_folder="web/static"
 )
 
-# Load configuration
-with open("config.json", "r") as f:
-    config = json.load(f)
+
+def load_json(path):
+    """Load and return JSON file contents."""
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def save_json(path, data):
+    """Save data to JSON file with pretty formatting."""
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 @app.route("/")
@@ -23,16 +32,72 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/config")
+@app.route("/settings")
+def settings_page():
+    """Serve the settings page."""
+    return render_template("settings.html")
+
+
+@app.route("/api/settings", methods=["GET"])
+def get_settings():
+    """Provide system settings to the frontend (reloads on each request)."""
+    return jsonify(load_json("settings.json"))
+
+
+@app.route("/api/settings", methods=["POST"])
+def save_settings():
+    """Save updated settings."""
+    data = request.get_json()
+    save_json("settings.json", data)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/config", methods=["GET"])
 def get_config():
-    """Provide configuration to the frontend."""
-    return jsonify(config)
+    """Provide room/device config to the frontend (reloads on each request)."""
+    return jsonify(load_json("config.json"))
+
+
+@app.route("/api/config", methods=["POST"])
+def save_config():
+    """Save updated config."""
+    data = request.get_json()
+    save_json("config.json", data)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/ha/entities")
+def ha_entities():
+    """Proxy: Fetch all entities from Home Assistant."""
+    try:
+        settings = load_json("settings.json")
+        ha = settings["ha"]
+        url = f"http://{ha['url']}:{ha['port']}/api/states"
+        headers = {"Authorization": f"Bearer {ha['token']}"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+
+        # Return simplified entity list
+        entities = []
+        for e in resp.json():
+            entities.append({
+                "entity_id": e["entity_id"],
+                "state": e["state"],
+                "friendly_name": e.get("attributes", {}).get("friendly_name", ""),
+                "domain": e["entity_id"].split(".")[0]
+            })
+        entities.sort(key=lambda x: x["entity_id"])
+        return jsonify(entities)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
 
 
 if __name__ == "__main__":
+    settings = load_json("settings.json")
+    config = load_json("config.json")
     print("=" * 50)
-    print("  franklins-dash")
-    print(f"  HA: {config['ha']['url']}:{config['ha']['port']}")
+    print(f"  franklins-dash — {settings['building']}")
+    print(f"  HA: {settings['ha']['url']}:{settings['ha']['port']}")
     print(f"  Rooms: {len(config['rooms'])}")
     print("=" * 50)
     app.run(host="0.0.0.0", port=5000, debug=True)
