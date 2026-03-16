@@ -10,6 +10,7 @@
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#111111">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js"></script>
 </head>
 <body data-theme="dark">
 
@@ -30,6 +31,8 @@
     </div>
     <div class="header-right">
       <span class="header-clock" id="clock"></span>
+      <button class="theme-toggle" id="edit-toggle" title="Anordnung bearbeiten" onclick="toggleEditMode()">✏️</button>
+      <button class="edit-save-btn hidden" id="edit-save-btn" onclick="saveEditMode()">💾 Speichern</button>
       <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
       <a href="/settings" class="theme-toggle" title="Einstellungen">⚙️</a>
       <div class="status-bar">
@@ -94,6 +97,8 @@
     let themeMode = "auto";
     let activeGroup = null;
     let climateEntityId = null;
+    let editMode = false;
+    let sortableInstances = [];
 
     const ICONS = {
       switch:  { on: "💡", off: "🔅" },
@@ -185,11 +190,23 @@
         btn.className = `sidebar-btn${group.id === activeGroup ? " active" : ""}`;
         btn.dataset.groupId = group.id;
         btn.innerHTML = `
+          ${editMode ? '<span class="edit-drag-handle sidebar-handle">☰</span>' : ''}
           <span class="sidebar-icon">${group.icon || ""}</span>
           <span class="sidebar-label">${group.name}</span>
         `;
-        btn.addEventListener("click", () => selectGroup(group.id));
+        btn.addEventListener("click", () => { if (!editMode) selectGroup(group.id); });
         sidebar.appendChild(btn);
+      }
+
+      // Make sidebar sortable in edit mode
+      if (editMode) {
+        sortableInstances.push(new Sortable(sidebar, {
+          handle: ".sidebar-handle",
+          animation: 150,
+          ghostClass: "edit-ghost",
+          chosenClass: "edit-chosen",
+          onEnd: function() { /* order saved on explicit save */ }
+        }));
       }
     }
 
@@ -222,6 +239,10 @@
     }
 
     function renderRooms() {
+      // Destroy old sortable instances
+      sortableInstances.forEach(s => s.destroy());
+      sortableInstances = [];
+
       const container = document.getElementById("rooms");
       container.innerHTML = "";
       const visibleRooms = getVisibleRooms();
@@ -229,10 +250,12 @@
       for (const room of visibleRooms) {
         const roomEl = document.createElement("div");
         roomEl.className = "room";
-        roomEl.innerHTML = `<div class="room-title">${room.icon || ""} ${room.name}</div>`;
+        roomEl.dataset.roomId = room.id;
+        roomEl.innerHTML = `<div class="room-title">${editMode ? '<span class="edit-drag-handle room-handle">☰</span> ' : ''}${room.icon || ""} ${room.name}</div>`;
 
         const grid = document.createElement("div");
         grid.className = "devices";
+        grid.dataset.roomId = room.id;
 
         for (const dev of room.devices) {
           let card;
@@ -242,11 +265,42 @@
           else if (dev.type === "sensor") card = createSensorCard(dev);
           else if (dev.type === "scene") card = createSceneCard(dev);
           else if (dev.type === "climate") card = createClimateCard(dev);
-          if (card) grid.appendChild(card);
+          if (card) {
+            card.dataset.entityId = dev.entity_id;
+            if (editMode) {
+              const handle = document.createElement("span");
+              handle.className = "edit-drag-handle device-handle";
+              handle.textContent = "☰";
+              card.insertBefore(handle, card.firstChild);
+            }
+            grid.appendChild(card);
+          }
         }
 
         roomEl.appendChild(grid);
         container.appendChild(roomEl);
+
+        // Make devices sortable within room
+        if (editMode) {
+          sortableInstances.push(new Sortable(grid, {
+            handle: ".device-handle",
+            animation: 150,
+            ghostClass: "edit-ghost",
+            chosenClass: "edit-chosen",
+            onEnd: function() { /* order saved on explicit save */ }
+          }));
+        }
+      }
+
+      // Make rooms sortable within grid
+      if (editMode) {
+        sortableInstances.push(new Sortable(container, {
+          handle: ".room-handle",
+          animation: 150,
+          ghostClass: "edit-ghost",
+          chosenClass: "edit-chosen",
+          onEnd: function() { /* order saved on explicit save */ }
+        }));
       }
     }
 
@@ -395,6 +449,7 @@
 
     // === CLIMATE MODAL ===
     function openClimateModal(entityId, name) {
+      if (editMode) return;
       climateEntityId = entityId;
       document.getElementById("climate-modal-title").textContent = `🌡️ ${name}`;
 
@@ -517,6 +572,7 @@
 
     // === ACTIONS ===
     function toggleDevice(entityId, type) {
+      if (editMode) return;
       const domainMap = { light: "light", switch: "switch", input_boolean: "input_boolean", automation: "automation" };
       const domain = domainMap[type] || "switch";
       if (type === "input_boolean") {
@@ -528,18 +584,22 @@
     }
 
     function activateScene(entityId) {
+      if (editMode) return;
       callService("scene", "turn_on", entityId);
     }
 
     function setBrightness(entityId, brightness) {
+      if (editMode) return;
       callService("light", "turn_on", entityId, { brightness });
     }
 
     function coverAction(entityId, action) {
+      if (editMode) return;
       callService("cover", { open: "open_cover", close: "close_cover", stop: "stop_cover" }[action], entityId);
     }
 
     function setCoverPosition(entityId, position) {
+      if (editMode) return;
       callService("cover", "set_cover_position", entityId, { position });
     }
 
@@ -647,6 +707,98 @@
       document.querySelectorAll(".climate-mode-btn").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.mode === state);
       });
+    }
+
+    // === EDIT MODE ===
+    function toggleEditMode() {
+      editMode = !editMode;
+      document.body.classList.toggle("edit-mode", editMode);
+      document.getElementById("edit-toggle").classList.toggle("edit-active", editMode);
+      document.getElementById("edit-save-btn").classList.toggle("hidden", !editMode);
+
+      // Re-render with/without drag handles
+      renderRooms();
+      renderSidebar();
+      // Re-apply states
+      for (const entityId in entityStates) {
+        updateDeviceUI(entityId, entityStates[entityId], entityAttrs[entityId]);
+      }
+    }
+
+    async function saveEditMode() {
+      // Collect new group order from sidebar
+      const sidebarBtns = document.querySelectorAll(".sidebar-btn");
+      const newGroupOrder = [];
+      sidebarBtns.forEach(btn => {
+        const groupId = btn.dataset.groupId;
+        const group = config.groups.find(g => g.id === groupId);
+        if (group) newGroupOrder.push(group);
+      });
+
+      // Collect new room order within current group view
+      const roomEls = document.querySelectorAll(".rooms-grid .room");
+      const reorderedRoomIds = [];
+      roomEls.forEach(el => {
+        reorderedRoomIds.push(el.dataset.roomId);
+      });
+
+      // Collect new entity order within each visible room
+      const deviceGrids = document.querySelectorAll(".devices[data-room-id]");
+      const roomDeviceUpdates = {};
+      deviceGrids.forEach(grid => {
+        const roomId = grid.dataset.roomId;
+        const entityIds = [];
+        grid.querySelectorAll(".device").forEach(card => {
+          if (card.dataset.entityId) entityIds.push(card.dataset.entityId);
+        });
+        roomDeviceUpdates[roomId] = entityIds;
+      });
+
+      // Apply group reorder
+      if (newGroupOrder.length > 0) {
+        config.groups = newGroupOrder;
+      }
+
+      // Apply room reorder: reposition rooms in config.rooms based on visible order
+      if (reorderedRoomIds.length > 0) {
+        const activeGroupObj = config.groups.find(g => g.id === activeGroup);
+        if (activeGroupObj && !activeGroupObj.rooms.includes("*")) {
+          activeGroupObj.rooms = reorderedRoomIds;
+        }
+      }
+
+      // Apply entity reorder within rooms
+      for (const [roomId, entityIds] of Object.entries(roomDeviceUpdates)) {
+        const room = config.rooms.find(r => r.id === roomId);
+        if (room) {
+          const newDevices = [];
+          for (const eid of entityIds) {
+            const dev = room.devices.find(d => d.entity_id === eid);
+            if (dev) newDevices.push(dev);
+          }
+          // Keep any devices not visible (shouldn't happen, but safety)
+          for (const dev of room.devices) {
+            if (!entityIds.includes(dev.entity_id)) newDevices.push(dev);
+          }
+          room.devices = newDevices;
+        }
+      }
+
+      // Save to server
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(config)
+        });
+        const result = await res.json();
+        if (result.status === "ok") {
+          // Exit edit mode
+          toggleEditMode();
+        }
+      } catch (e) {
+        console.error("Save failed:", e);
+      }
     }
 
     // === HELPERS ===

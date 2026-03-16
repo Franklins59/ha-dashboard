@@ -28,7 +28,6 @@
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab active" data-tab="system">⚙️ System</button>
-    <button class="tab" data-tab="entities">🔍 Entity-Browser</button>
     <button class="tab" data-tab="config">🏠 Konfiguration</button>
   </div>
 
@@ -81,25 +80,15 @@
       </div>
     </div>
 
-    <!-- Entity Browser -->
-    <div class="tab-panel" id="panel-entities">
-      <div class="panel-section">
-        <div class="entity-toolbar">
-          <input type="text" id="entity-search" placeholder="Suchen (z.B. light, cover, büro...)" oninput="filterEntities()">
-          <select id="entity-domain-filter" onchange="filterEntities()">
-            <option value="">Alle Domains</option>
-          </select>
-          <button class="btn" onclick="loadEntities()">Aktualisieren</button>
-        </div>
-        <div class="entity-stats" id="entity-stats"></div>
-      </div>
-      <div class="entity-list" id="entity-list">
-        <div class="entity-placeholder">Klicke "Aktualisieren" um Entities von HA zu laden.</div>
-      </div>
-    </div>
-
     <!-- Config Editor -->
     <div class="tab-panel" id="panel-config">
+      <div class="panel-section" style="display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <h3 style="margin-bottom:0.2rem">Geführte Konfiguration</h3>
+          <p class="hint" style="margin:0">Räume, Geräte und Gruppen Schritt für Schritt einrichten.</p>
+        </div>
+        <a href="/wizard" class="btn btn-primary" style="text-decoration:none">🧙 Wizard starten</a>
+      </div>
       <div class="panel-section">
         <div class="config-toolbar">
           <h3>Konfiguration (config.json)</h3>
@@ -109,17 +98,15 @@
             <span class="save-result" id="config-save-result"></span>
           </div>
         </div>
-        <p class="hint">Direkte Bearbeitung der config.json. Vorsicht: Ungültiges JSON führt zu Fehlern.</p>
+        <p class="hint"><strong style="color: #f87171;">Vorsicht: Ungültiges JSON führt zu Fehlern.</strong></p>
         <textarea id="config-editor" spellcheck="false"></textarea>
+        <p class="hint touch-only-hint" style="display:none; margin-top:0.5rem; color: var(--text-dim);">Auf diesem Gerät ist die Bearbeitung deaktiviert. Bitte am PC/Mac bearbeiten.</p>
       </div>
     </div>
 
   </div>
 
   <script>
-    // === STATE ===
-    let allEntities = [];
-
     // === TABS ===
     document.querySelectorAll(".tab").forEach(tab => {
       tab.addEventListener("click", () => {
@@ -128,8 +115,6 @@
         tab.classList.add("active");
         document.getElementById(`panel-${tab.dataset.tab}`).classList.add("active");
 
-        // Auto-load on first visit
-        if (tab.dataset.tab === "entities" && allEntities.length === 0) loadEntities();
         if (tab.dataset.tab === "config") loadConfigEditor();
       });
     });
@@ -203,79 +188,6 @@
       el.type = el.type === "password" ? "text" : "password";
     }
 
-    // === ENTITY BROWSER ===
-    async function loadEntities() {
-      const list = document.getElementById("entity-list");
-      list.innerHTML = '<div class="entity-placeholder">Lade Entities...</div>';
-      try {
-        const res = await fetch("/api/ha/entities");
-        allEntities = await res.json();
-        if (allEntities.error) {
-          list.innerHTML = `<div class="entity-placeholder error">Fehler: ${allEntities.error}</div>`;
-          return;
-        }
-        populateDomainFilter();
-        filterEntities();
-        document.getElementById("entity-stats").textContent = `${allEntities.length} Entities geladen`;
-      } catch (e) {
-        list.innerHTML = `<div class="entity-placeholder error">Fehler: ${e.message}</div>`;
-      }
-    }
-
-    function populateDomainFilter() {
-      const domains = [...new Set(allEntities.map(e => e.domain))].sort();
-      const select = document.getElementById("entity-domain-filter");
-      select.innerHTML = '<option value="">Alle Domains</option>';
-      for (const d of domains) {
-        const count = allEntities.filter(e => e.domain === d).length;
-        select.innerHTML += `<option value="${d}">${d} (${count})</option>`;
-      }
-    }
-
-    function filterEntities() {
-      const search = document.getElementById("entity-search").value.toLowerCase();
-      const domain = document.getElementById("entity-domain-filter").value;
-      const list = document.getElementById("entity-list");
-
-      let filtered = allEntities;
-      if (domain) filtered = filtered.filter(e => e.domain === domain);
-      if (search) filtered = filtered.filter(e =>
-        e.entity_id.toLowerCase().includes(search) ||
-        e.friendly_name.toLowerCase().includes(search)
-      );
-
-      if (filtered.length === 0) {
-        list.innerHTML = '<div class="entity-placeholder">Keine Treffer</div>';
-        return;
-      }
-
-      list.innerHTML = filtered.map(e => `
-        <div class="entity-row" onclick="copyEntityId('${e.entity_id}')">
-          <span class="entity-domain">${e.domain}</span>
-          <span class="entity-id">${e.entity_id}</span>
-          <span class="entity-name">${e.friendly_name}</span>
-          <span class="entity-state">${e.state}</span>
-          <button class="btn-copy" title="Entity-ID kopieren">📋</button>
-        </div>
-      `).join("");
-
-      document.getElementById("entity-stats").textContent =
-        `${filtered.length} von ${allEntities.length} Entities`;
-    }
-
-    function copyEntityId(id) {
-      navigator.clipboard.writeText(id).then(() => {
-        // Brief visual feedback
-        const rows = document.querySelectorAll(".entity-row");
-        rows.forEach(r => {
-          if (r.querySelector(".entity-id").textContent === id) {
-            r.classList.add("copied");
-            setTimeout(() => r.classList.remove("copied"), 600);
-          }
-        });
-      });
-    }
-
     // === CONFIG EDITOR ===
     async function loadConfigEditor() {
       try {
@@ -337,6 +249,16 @@
     loadSettings().then(() => {
       applyTheme(document.getElementById("s-theme").value || "auto");
     });
+
+    // Disable config editor on touch devices
+    if (window.matchMedia("(hover: none) and (pointer: coarse)").matches) {
+      const editor = document.getElementById("config-editor");
+      if (editor) editor.readOnly = true;
+      const hint = document.querySelector(".touch-only-hint");
+      if (hint) hint.style.display = "block";
+      // Hide save button for config
+      document.querySelectorAll(".config-toolbar-actions .btn-primary").forEach(btn => btn.style.display = "none");
+    }
   </script>
 </body>
 </html>

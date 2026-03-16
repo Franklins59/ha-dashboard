@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>franklins dash — Konfigurations-Wizard</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/wizard.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js"></script>
+</head>
+<body data-theme="light">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <a href="/settings" class="back-btn" title="Zurück">←</a>
+      <img src="/static/logo.png" class="header-logo" alt="franklins">
+      <div class="header-title">Konfigurations-Wizard</div>
+    </div>
+    <div class="header-right">
+      <div class="wiz-steps-indicator" id="steps-indicator"></div>
+    </div>
+  </div>
+
+  <!-- Wizard container -->
+  <div class="wiz-container">
+
+    <!-- Step 1: Connection -->
+    <div class="wiz-step active" data-step="1">
+      <div class="wiz-step-header">
+        <h2>1. Verbindung prüfen</h2>
+        <p>Sicherstellen, dass Home Assistant erreichbar ist.</p>
+      </div>
+      <div class="wiz-panel">
+        <div class="wiz-info-row">
+          <span class="wiz-info-label">HA-Adresse</span>
+          <span class="wiz-info-value" id="w-ha-url">—</span>
+        </div>
+        <div class="wiz-info-row">
+          <span class="wiz-info-label">Status</span>
+          <span class="wiz-info-value" id="w-ha-status">Prüfe...</span>
+        </div>
+        <div class="wiz-info-row">
+          <span class="wiz-info-label">Entities</span>
+          <span class="wiz-info-value" id="w-ha-count">—</span>
+        </div>
+      </div>
+      <div class="wiz-hint" id="w-connection-hint"></div>
+    </div>
+
+    <!-- Step 2: Entities -->
+    <div class="wiz-step" data-step="2">
+      <div class="wiz-step-header">
+        <h2>2. Entities</h2>
+        <p>Übersicht der verfügbaren HA-Entities nach Typ.</p>
+      </div>
+      <div class="wiz-panel">
+        <div class="wiz-domain-grid" id="w-domain-grid"></div>
+      </div>
+      <div class="wiz-hint">Die hier gezeigten Entities können in Schritt 3 den Räumen zugewiesen werden.</div>
+    </div>
+
+    <!-- Step 3: Rooms -->
+    <div class="wiz-step" data-step="3">
+      <div class="wiz-step-header">
+        <h2>3. Räume</h2>
+        <p>Räume erstellen und Entities zuweisen.</p>
+      </div>
+      <div class="wiz-rooms-layout">
+        <div class="wiz-rooms-sidebar">
+          <div class="wiz-rooms-list" id="w-rooms-list"></div>
+          <button class="wiz-btn wiz-btn-add" onclick="addRoom()">+ Raum hinzufügen</button>
+        </div>
+        <div class="wiz-rooms-editor" id="w-room-editor">
+          <div class="wiz-placeholder">Wähle einen Raum aus der Liste oder erstelle einen neuen.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: Groups -->
+    <div class="wiz-step" data-step="4">
+      <div class="wiz-step-header">
+        <h2>4. Gruppen</h2>
+        <p>Gruppen erstellen und Räume zuweisen.</p>
+      </div>
+      <div class="wiz-rooms-layout">
+        <div class="wiz-rooms-sidebar">
+          <div class="wiz-rooms-list" id="w-groups-list"></div>
+          <button class="wiz-btn wiz-btn-add" onclick="addGroup()">+ Gruppe hinzufügen</button>
+        </div>
+        <div class="wiz-rooms-editor" id="w-group-editor">
+          <div class="wiz-placeholder">Wähle eine Gruppe aus der Liste oder erstelle eine neue.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Preview & Save -->
+    <div class="wiz-step" data-step="5">
+      <div class="wiz-step-header">
+        <h2>5. Vorschau & Speichern</h2>
+        <p>Prüfe die generierte Konfiguration und speichere sie.</p>
+      </div>
+      <div class="wiz-panel">
+        <div class="wiz-preview-stats" id="w-preview-stats"></div>
+        <textarea id="w-preview" class="wiz-preview" readonly></textarea>
+      </div>
+      <div class="wiz-save-row">
+        <button class="wiz-btn wiz-btn-primary wiz-btn-large" onclick="saveWizardConfig()">💾 config.json speichern</button>
+        <span class="wiz-save-result" id="w-save-result"></span>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="wiz-nav">
+      <button class="wiz-btn" id="w-btn-back" onclick="prevStep()">← Zurück</button>
+      <div class="wiz-step-dots" id="w-step-dots"></div>
+      <button class="wiz-btn wiz-btn-primary" id="w-btn-next" onclick="nextStep()">Weiter →</button>
+    </div>
+
+  </div>
+
+  <script>
+    // === STATE ===
+    let currentStep = 1;
+    const totalSteps = 5;
+    let allEntities = [];
+    let wizRooms = [];
+    let wizGroups = [];
+    let activeRoomIdx = -1;
+    let activeGroupIdx = -1;
+
+    // Domain -> device type mapping
+    const DOMAIN_TYPE_MAP = {
+      switch: "switch",
+      light: "light",
+      cover: "cover",
+      sensor: "sensor",
+      climate: "climate",
+      scene: "scene",
+      input_boolean: "input_boolean",
+      automation: "automation"
+    };
+
+    const DOMAIN_LABELS = {
+      switch: "Switches",
+      light: "Lichter",
+      cover: "Cover / Storen",
+      sensor: "Sensoren",
+      climate: "Klima / Heizung",
+      scene: "Szenen",
+      input_boolean: "Schalter (Boolean)",
+      automation: "Automationen"
+    };
+
+    const DOMAIN_ICONS = {
+      switch: "💡", light: "💡", cover: "🪟", sensor: "📊",
+      climate: "🌡️", scene: "🎬", input_boolean: "✅", automation: "⚙️"
+    };
+
+    const ROOM_ICONS = ["🛋️", "🍳", "🍽️", "🛏️", "🛁", "🚿", "🖥️", "📚", "🔧", "🚪", "🪜", "👔", "🗄️", "☀️", "⚡", "🎬", "🚶", "🏠"];
+
+    // === THEME ===
+    function getAutoTheme() {
+      const h = new Date().getHours();
+      return (h >= 7 && h < 20) ? "light" : "dark";
+    }
+
+    async function applyTheme() {
+      try {
+        const res = await fetch("/api/settings");
+        const s = await res.json();
+        const theme = s.theme || "auto";
+        document.body.dataset.theme = theme === "auto" ? getAutoTheme() : theme;
+      } catch (e) {
+        document.body.dataset.theme = "light";
+      }
+    }
+
+    // === NAVIGATION ===
+    function updateNav() {
+      document.querySelectorAll(".wiz-step").forEach(el => {
+        el.classList.toggle("active", parseInt(el.dataset.step) === currentStep);
+      });
+      document.getElementById("w-btn-back").style.visibility = currentStep === 1 ? "hidden" : "visible";
+      document.getElementById("w-btn-next").textContent = currentStep === totalSteps ? "✓ Fertig" : "Weiter →";
+
+      // Step dots
+      const dots = document.getElementById("w-step-dots");
+      dots.innerHTML = "";
+      for (let i = 1; i <= totalSteps; i++) {
+        const dot = document.createElement("span");
+        dot.className = `wiz-dot${i === currentStep ? " active" : ""}${i < currentStep ? " done" : ""}`;
+        dot.textContent = i;
+        dot.addEventListener("click", () => goToStep(i));
+        dots.appendChild(dot);
+      }
+    }
+
+    function nextStep() {
+      if (currentStep === totalSteps) {
+        window.location.href = "/";
+        return;
+      }
+      goToStep(currentStep + 1);
+    }
+
+    function prevStep() {
+      if (currentStep > 1) goToStep(currentStep - 1);
+    }
+
+    function goToStep(step) {
+      currentStep = step;
+      updateNav();
+      if (step === 2) renderDomainGrid();
+      if (step === 3) renderRoomsList();
+      if (step === 4) renderGroupsList();
+      if (step === 5) renderPreview();
+    }
+
+    // === STEP 1: CONNECTION ===
+    async function checkConnection() {
+      try {
+        const settingsRes = await fetch("/api/settings");
+        const settings = await settingsRes.json();
+        document.getElementById("w-ha-url").textContent = `${settings.ha.url}:${settings.ha.port}`;
+
+        const res = await fetch("/api/ha/entities");
+        const data = await res.json();
+
+        if (data.error) {
+          document.getElementById("w-ha-status").innerHTML = '<span class="wiz-error">Fehler: ' + data.error + '</span>';
+          document.getElementById("w-connection-hint").textContent = "Prüfe die HA-Verbindung unter /settings.";
+          return;
+        }
+
+        allEntities = data;
+        document.getElementById("w-ha-status").innerHTML = '<span class="wiz-success">Verbunden ✓</span>';
+        document.getElementById("w-ha-count").textContent = `${data.length} Entities`;
+        document.getElementById("w-connection-hint").textContent = "";
+      } catch (e) {
+        document.getElementById("w-ha-status").innerHTML = '<span class="wiz-error">Nicht erreichbar</span>';
+        document.getElementById("w-connection-hint").textContent = "Prüfe die HA-Verbindung unter /settings.";
+      }
+    }
+
+    // === STEP 2: ENTITIES ===
+    function renderDomainGrid() {
+      const grid = document.getElementById("w-domain-grid");
+      grid.innerHTML = "";
+
+      const domains = {};
+      for (const e of allEntities) {
+        if (!DOMAIN_TYPE_MAP[e.domain]) continue;
+        if (!domains[e.domain]) domains[e.domain] = [];
+        domains[e.domain].push(e);
+      }
+
+      for (const [domain, entities] of Object.entries(domains).sort()) {
+        const card = document.createElement("div");
+        card.className = "wiz-domain-card";
+        card.innerHTML = `
+          <div class="wiz-domain-icon">${DOMAIN_ICONS[domain] || "📦"}</div>
+          <div class="wiz-domain-name">${DOMAIN_LABELS[domain] || domain}</div>
+          <div class="wiz-domain-count">${entities.length}</div>
+        `;
+        grid.appendChild(card);
+      }
+    }
+
+    // === STEP 3: ROOMS ===
+    function getUsedEntityIds() {
+      const used = new Set();
+      for (const room of wizRooms) {
+        for (const dev of room.devices) used.add(dev.entity_id);
+      }
+      return used;
+    }
+
+    function renderRoomsList() {
+      const list = document.getElementById("w-rooms-list");
+      list.innerHTML = "";
+      for (let i = 0; i < wizRooms.length; i++) {
+        const room = wizRooms[i];
+        const el = document.createElement("div");
+        el.className = `wiz-list-item${i === activeRoomIdx ? " active" : ""}`;
+        el.innerHTML = `
+          <span>${room.icon || "🏠"} ${room.name}</span>
+          <span class="wiz-list-badge">${room.devices.length}</span>
+        `;
+        el.addEventListener("click", () => selectRoom(i));
+        list.appendChild(el);
+      }
+    }
+
+    function selectRoom(idx) {
+      activeRoomIdx = idx;
+      renderRoomsList();
+      renderRoomEditor();
+    }
+
+    function addRoom() {
+      const name = prompt("Raumname:");
+      if (!name) return;
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_");
+      wizRooms.push({ id, name, icon: "🏠", devices: [] });
+      activeRoomIdx = wizRooms.length - 1;
+      renderRoomsList();
+      renderRoomEditor();
+    }
+
+    function deleteRoom(idx) {
+      if (!confirm(`Raum "${wizRooms[idx].name}" löschen?`)) return;
+      wizRooms.splice(idx, 1);
+      activeRoomIdx = -1;
+      renderRoomsList();
+      document.getElementById("w-room-editor").innerHTML = '<div class="wiz-placeholder">Wähle einen Raum.</div>';
+    }
+
+    function renderRoomEditor() {
+      const editor = document.getElementById("w-room-editor");
+      if (activeRoomIdx < 0 || activeRoomIdx >= wizRooms.length) {
+        editor.innerHTML = '<div class="wiz-placeholder">Wähle einen Raum.</div>';
+        return;
+      }
+      const room = wizRooms[activeRoomIdx];
+
+      let html = `
+        <div class="wiz-room-header">
+          <div class="wiz-form-row">
+            <label>Name</label>
+            <input type="text" value="${room.name}" onchange="updateRoomField(${activeRoomIdx}, 'name', this.value)">
+          </div>
+          <div class="wiz-form-row">
+            <label>Icon</label>
+            <div class="wiz-icon-picker">
+              ${ROOM_ICONS.map(ic => `<span class="wiz-icon-option${ic === room.icon ? ' selected' : ''}" onclick="updateRoomField(${activeRoomIdx}, 'icon', '${ic}')">${ic}</span>`).join("")}
+            </div>
+          </div>
+          <button class="wiz-btn wiz-btn-danger wiz-btn-small" onclick="deleteRoom(${activeRoomIdx})">🗑 Raum löschen</button>
+        </div>
+
+        <div class="wiz-section-label">Zugewiesene Entities <span class="wiz-section-hint">(Reihenfolge per Drag & Drop ändern)</span></div>
+        <div class="wiz-sortable-list" id="w-assigned-entities">`;
+
+      // Assigned entities in current order
+      for (let i = 0; i < room.devices.length; i++) {
+        const d = room.devices[i];
+        html += `
+          <div class="wiz-sortable-item" data-entity-id="${d.entity_id}">
+            <span class="wiz-drag-handle">☰</span>
+            <span class="wiz-entity-domain">${d.type}</span>
+            <span class="wiz-entity-id">${d.entity_id}</span>
+            <span class="wiz-entity-fname">${d.name}</span>
+            <button class="wiz-btn-remove" onclick="removeEntity(${activeRoomIdx}, '${d.entity_id}')" title="Entfernen">✕</button>
+          </div>`;
+      }
+
+      html += `</div>
+
+        <div class="wiz-section-label">Verfügbare Entities</div>
+        <div class="wiz-entity-search-row">
+          <input type="text" id="w-room-entity-search" placeholder="Entity suchen..." oninput="renderAvailableEntities()">
+          <select id="w-room-domain-filter" onchange="renderAvailableEntities()">
+            <option value="">Alle Domains</option>
+            <option value="switch">switch</option>
+            <option value="light">light</option>
+            <option value="cover">cover</option>
+            <option value="sensor">sensor</option>
+            <option value="climate">climate</option>
+            <option value="scene">scene</option>
+            <option value="input_boolean">input_boolean</option>
+            <option value="automation">automation</option>
+          </select>
+        </div>
+        <div class="wiz-entity-list" id="w-available-entities"></div>`;
+
+      editor.innerHTML = html;
+
+      // Initialize SortableJS on assigned list
+      const sortableEl = document.getElementById("w-assigned-entities");
+      if (sortableEl) {
+        new Sortable(sortableEl, {
+          handle: ".wiz-drag-handle",
+          animation: 150,
+          onEnd: function() {
+            // Rebuild devices array from new DOM order
+            const items = sortableEl.querySelectorAll(".wiz-sortable-item");
+            const newDevices = [];
+            items.forEach(item => {
+              const entityId = item.dataset.entityId;
+              const dev = room.devices.find(d => d.entity_id === entityId);
+              if (dev) newDevices.push(dev);
+            });
+            wizRooms[activeRoomIdx].devices = newDevices;
+            renderRoomsList();
+          }
+        });
+      }
+
+      renderAvailableEntities();
+    }
+
+    function renderAvailableEntities() {
+      const container = document.getElementById("w-available-entities");
+      if (!container) return;
+      const room = wizRooms[activeRoomIdx];
+
+      const search = (document.getElementById("w-room-entity-search")?.value || "").toLowerCase();
+      const domainFilter = document.getElementById("w-room-domain-filter")?.value || "";
+
+      const usedByAnyRoom = new Set();
+      for (const r of wizRooms) {
+        for (const d of r.devices) usedByAnyRoom.add(d.entity_id);
+      }
+
+      const relevantDomains = Object.keys(DOMAIN_TYPE_MAP);
+      let entities = allEntities.filter(e => relevantDomains.includes(e.domain));
+      // Hide already assigned to this room
+      const roomEntityIds = new Set(room.devices.map(d => d.entity_id));
+      entities = entities.filter(e => !roomEntityIds.has(e.entity_id));
+      if (domainFilter) entities = entities.filter(e => e.domain === domainFilter);
+      if (search) entities = entities.filter(e =>
+        e.entity_id.toLowerCase().includes(search) || e.friendly_name.toLowerCase().includes(search));
+
+      let html = "";
+      for (const e of entities) {
+        const usedElsewhere = usedByAnyRoom.has(e.entity_id);
+        html += `
+          <div class="wiz-entity-row${usedElsewhere ? ' used-elsewhere' : ''}" onclick="${usedElsewhere ? '' : `addEntity(${activeRoomIdx}, '${e.entity_id}', '${e.friendly_name.replace(/'/g, "\\'")}', '${e.domain}')`}">
+            <span class="wiz-entity-domain">${e.domain}</span>
+            <span class="wiz-entity-id">${e.entity_id}</span>
+            <span class="wiz-entity-fname">${e.friendly_name}</span>
+            <span class="wiz-btn-add-entity">${usedElsewhere ? '🔒' : '+'}</span>
+          </div>`;
+      }
+
+      if (entities.length === 0) html = '<div class="wiz-placeholder" style="padding:0.5rem">Keine Treffer</div>';
+      container.innerHTML = html;
+    }
+
+    function addEntity(roomIdx, entityId, friendlyName, domain) {
+      const room = wizRooms[roomIdx];
+      const type = DOMAIN_TYPE_MAP[domain] || "switch";
+      const dev = { entity_id: entityId, name: friendlyName || entityId, type };
+      if (type === "sensor") {
+        if (entityId.includes("temp")) dev.unit = "°C";
+        else if (entityId.includes("feucht") || entityId.includes("humid")) dev.unit = "%";
+        else if (entityId.includes("leistung") || entityId.includes("power")) dev.unit = "W";
+        else if (entityId.includes("wind")) dev.unit = "km/h";
+      }
+      if (type === "scene") dev.icon = "🎬";
+      room.devices.push(dev);
+      renderRoomsList();
+      renderRoomEditor();
+    }
+
+    function removeEntity(roomIdx, entityId) {
+      wizRooms[roomIdx].devices = wizRooms[roomIdx].devices.filter(d => d.entity_id !== entityId);
+      renderRoomsList();
+      renderRoomEditor();
+    }
+
+    function updateRoomField(idx, field, value) {
+      wizRooms[idx][field] = value;
+      if (field === "name") {
+        wizRooms[idx].id = value.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_");
+      }
+      renderRoomsList();
+    }
+
+    // === STEP 4: GROUPS ===
+    function renderGroupsList() {
+      const list = document.getElementById("w-groups-list");
+      list.innerHTML = "";
+      for (let i = 0; i < wizGroups.length; i++) {
+        const group = wizGroups[i];
+        const roomCount = group.rooms.includes("*") ? "alle" : group.rooms.length;
+        const el = document.createElement("div");
+        el.className = `wiz-list-item${i === activeGroupIdx ? " active" : ""}`;
+        el.innerHTML = `
+          <span>${group.icon || "📁"} ${group.name}</span>
+          <span class="wiz-list-badge">${roomCount}</span>
+        `;
+        el.addEventListener("click", () => selectGroup(i));
+        list.appendChild(el);
+      }
+    }
+
+    function selectGroup(idx) {
+      activeGroupIdx = idx;
+      renderGroupsList();
+      renderGroupEditor();
+    }
+
+    function addGroup() {
+      const name = prompt("Gruppenname:");
+      if (!name) return;
+      const id = name.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_");
+      wizGroups.push({ id, name, icon: "🏠", rooms: [] });
+      activeGroupIdx = wizGroups.length - 1;
+      renderGroupsList();
+      renderGroupEditor();
+    }
+
+    function deleteGroup(idx) {
+      if (!confirm(`Gruppe "${wizGroups[idx].name}" löschen?`)) return;
+      wizGroups.splice(idx, 1);
+      activeGroupIdx = -1;
+      renderGroupsList();
+      document.getElementById("w-group-editor").innerHTML = '<div class="wiz-placeholder">Wähle eine Gruppe.</div>';
+    }
+
+    function renderGroupEditor() {
+      const editor = document.getElementById("w-group-editor");
+      if (activeGroupIdx < 0 || activeGroupIdx >= wizGroups.length) {
+        editor.innerHTML = '<div class="wiz-placeholder">Wähle eine Gruppe.</div>';
+        return;
+      }
+      const group = wizGroups[activeGroupIdx];
+      const isWildcard = group.rooms.includes("*");
+
+      let html = `
+        <div class="wiz-room-header">
+          <div class="wiz-form-row">
+            <label>Name</label>
+            <input type="text" value="${group.name}" onchange="updateGroupField(${activeGroupIdx}, 'name', this.value)">
+          </div>
+          <div class="wiz-form-row">
+            <label>Icon</label>
+            <div class="wiz-icon-picker">
+              ${ROOM_ICONS.map(ic => `<span class="wiz-icon-option${ic === group.icon ? ' selected' : ''}" onclick="updateGroupField(${activeGroupIdx}, 'icon', '${ic}')">${ic}</span>`).join("")}
+            </div>
+          </div>
+          <div class="wiz-form-row">
+            <label>
+              <input type="checkbox" ${isWildcard ? "checked" : ""} onchange="toggleWildcard(${activeGroupIdx}, this.checked)">
+              Alle Räume anzeigen (Wildcard)
+            </label>
+          </div>
+          <button class="wiz-btn wiz-btn-danger wiz-btn-small" onclick="deleteGroup(${activeGroupIdx})">🗑 Gruppe löschen</button>
+        </div>`;
+
+      if (!isWildcard) {
+        // Assigned rooms (sortable)
+        const assignedRoomIds = group.rooms.filter(r => r !== "*");
+        html += `<div class="wiz-section-label">Zugewiesene Räume <span class="wiz-section-hint">(Reihenfolge per Drag & Drop)</span></div>
+          <div class="wiz-sortable-list" id="w-assigned-rooms">`;
+
+        for (const roomId of assignedRoomIds) {
+          const room = wizRooms.find(r => r.id === roomId);
+          if (!room) continue;
+          html += `
+            <div class="wiz-sortable-item" data-room-id="${room.id}">
+              <span class="wiz-drag-handle">☰</span>
+              <span class="wiz-entity-domain">${room.icon || "🏠"}</span>
+              <span class="wiz-entity-id">${room.name}</span>
+              <span class="wiz-entity-fname">${room.devices.length} Geräte</span>
+              <button class="wiz-btn-remove" onclick="removeGroupRoom(${activeGroupIdx}, '${room.id}')" title="Entfernen">✕</button>
+            </div>`;
+        }
+
+        html += `</div>
+          <div class="wiz-section-label">Verfügbare Räume</div>
+          <div class="wiz-entity-list">`;
+
+        // Available rooms (not yet assigned)
+        for (const room of wizRooms) {
+          if (assignedRoomIds.includes(room.id)) continue;
+          html += `
+            <div class="wiz-entity-row" onclick="addGroupRoom(${activeGroupIdx}, '${room.id}')">
+              <span class="wiz-entity-domain">${room.icon || "🏠"}</span>
+              <span class="wiz-entity-id">${room.name}</span>
+              <span class="wiz-entity-fname">${room.devices.length} Geräte</span>
+              <span class="wiz-btn-add-entity">+</span>
+            </div>`;
+        }
+
+        html += `</div>`;
+      }
+
+      editor.innerHTML = html;
+
+      // Initialize SortableJS on assigned rooms
+      const sortableEl = document.getElementById("w-assigned-rooms");
+      if (sortableEl) {
+        new Sortable(sortableEl, {
+          handle: ".wiz-drag-handle",
+          animation: 150,
+          onEnd: function() {
+            const items = sortableEl.querySelectorAll(".wiz-sortable-item");
+            const newRooms = [];
+            items.forEach(item => {
+              newRooms.push(item.dataset.roomId);
+            });
+            wizGroups[activeGroupIdx].rooms = newRooms;
+            renderGroupsList();
+          }
+        });
+      }
+    }
+
+    function addGroupRoom(groupIdx, roomId) {
+      const group = wizGroups[groupIdx];
+      if (!group.rooms.includes(roomId)) group.rooms.push(roomId);
+      renderGroupsList();
+      renderGroupEditor();
+    }
+
+    function removeGroupRoom(groupIdx, roomId) {
+      wizGroups[groupIdx].rooms = wizGroups[groupIdx].rooms.filter(r => r !== roomId);
+      renderGroupsList();
+      renderGroupEditor();
+    }
+
+    function updateGroupField(idx, field, value) {
+      wizGroups[idx][field] = value;
+      if (field === "name") {
+        wizGroups[idx].id = value.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/_+/g, "_");
+      }
+      renderGroupsList();
+    }
+
+    function toggleWildcard(groupIdx, checked) {
+      wizGroups[groupIdx].rooms = checked ? ["*"] : [];
+      renderGroupEditor();
+      renderGroupsList();
+    }
+
+    // === STEP 5: PREVIEW ===
+    function buildConfig() {
+      return {
+        groups: wizGroups.map(g => ({ id: g.id, name: g.name, icon: g.icon, rooms: g.rooms })),
+        rooms: wizRooms.map(r => ({
+          id: r.id,
+          name: r.name,
+          icon: r.icon,
+          devices: r.devices.map(d => {
+            const dev = { entity_id: d.entity_id, name: d.name, type: d.type };
+            if (d.unit) dev.unit = d.unit;
+            if (d.icon && d.type === "scene") dev.icon = d.icon;
+            return dev;
+          })
+        }))
+      };
+    }
+
+    function renderPreview() {
+      const config = buildConfig();
+      const totalDevices = config.rooms.reduce((sum, r) => sum + r.devices.length, 0);
+      document.getElementById("w-preview-stats").innerHTML =
+        `<strong>${config.groups.length}</strong> Gruppen · <strong>${config.rooms.length}</strong> Räume · <strong>${totalDevices}</strong> Geräte`;
+      document.getElementById("w-preview").value = JSON.stringify(config, null, 2);
+    }
+
+    async function saveWizardConfig() {
+      const config = buildConfig();
+      try {
+        const res = await fetch("/api/config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(config)
+        });
+        const result = await res.json();
+        const el = document.getElementById("w-save-result");
+        if (result.status === "ok") {
+          el.innerHTML = '<span class="wiz-success">Gespeichert ✓</span>';
+        } else {
+          el.innerHTML = '<span class="wiz-error">Fehler</span>';
+        }
+      } catch (e) {
+        document.getElementById("w-save-result").innerHTML = '<span class="wiz-error">Fehler: ' + e.message + '</span>';
+      }
+    }
+
+    // === LOAD EXISTING CONFIG ===
+    async function loadExistingConfig() {
+      try {
+        const res = await fetch("/api/config");
+        const config = await res.json();
+        if (config.rooms && config.rooms.length > 0) {
+          wizRooms = config.rooms.map(r => ({
+            id: r.id,
+            name: r.name,
+            icon: r.icon || "🏠",
+            devices: (r.devices || []).map(d => ({ ...d }))
+          }));
+        }
+        if (config.groups && config.groups.length > 0) {
+          wizGroups = config.groups.map(g => ({
+            id: g.id,
+            name: g.name,
+            icon: g.icon || "🏠",
+            rooms: [...(g.rooms || [])]
+          }));
+        }
+      } catch (e) {
+        // No existing config, start fresh
+      }
+    }
+
+    // === INIT ===
+    async function init() {
+      await applyTheme();
+      await loadExistingConfig();
+      await checkConnection();
+      updateNav();
+    }
+
+    init();
+  </script>
+</body>
+</html>

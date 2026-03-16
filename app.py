@@ -38,6 +38,12 @@ def settings_page():
     return render_template("settings.html")
 
 
+@app.route("/wizard")
+def wizard_page():
+    """Serve the configuration wizard."""
+    return render_template("wizard.html")
+
+
 @app.route("/api/settings", methods=["GET"])
 def get_settings():
     """Provide system settings to the frontend (reloads on each request)."""

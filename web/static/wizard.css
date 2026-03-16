@@ -1,0 +1,588 @@
+/* === Wizard === */
+
+.wiz-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  height: calc(100% - 70px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Steps --- */
+.wiz-step {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.wiz-step.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.wiz-step-header {
+  margin-bottom: 1rem;
+}
+
+.wiz-step-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.wiz-step-header p {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+/* --- Panels --- */
+.wiz-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.wiz-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.wiz-info-row:last-child {
+  border-bottom: none;
+}
+
+.wiz-info-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.wiz-info-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.wiz-success { color: var(--accent); }
+.wiz-error { color: #f87171; }
+
+.wiz-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.3rem;
+}
+
+/* --- Domain grid (Step 2) --- */
+.wiz-domain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+}
+
+.wiz-domain-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem;
+  text-align: center;
+}
+
+.wiz-domain-icon {
+  font-size: 1.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.wiz-domain-name {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.wiz-domain-count {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 0.2rem;
+}
+
+/* --- Rooms / Groups layout (Step 3, 4) --- */
+.wiz-rooms-layout {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.wiz-rooms-sidebar {
+  width: 200px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wiz-rooms-list {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.wiz-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.82rem;
+  transition: all 0.15s;
+}
+
+.wiz-list-item:last-child {
+  border-bottom: none;
+}
+
+.wiz-list-item:hover {
+  background: var(--surface-hover);
+}
+
+.wiz-list-item.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.wiz-list-badge {
+  font-size: 0.7rem;
+  background: var(--border);
+  color: var(--text-dim);
+  padding: 0.15rem 0.4rem;
+  border-radius: 8px;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.wiz-list-item.active .wiz-list-badge {
+  background: var(--accent);
+  color: #111;
+}
+
+/* --- Room/Group editor --- */
+.wiz-rooms-editor {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.wiz-placeholder {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: 2rem;
+}
+
+.wiz-room-header {
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wiz-form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.wiz-form-row label {
+  min-width: 50px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.wiz-form-row input[type="text"] {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.wiz-form-row input[type="text"]:focus {
+  border-color: var(--accent);
+}
+
+/* --- Icon picker --- */
+.wiz-icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.wiz-icon-option {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.wiz-icon-option:hover {
+  background: var(--surface-hover);
+  border-color: var(--border);
+}
+
+.wiz-icon-option.selected {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+}
+
+/* --- Entity assignment --- */
+.wiz-entity-assign {
+  margin-top: 0.5rem;
+}
+
+.wiz-entity-search-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.wiz-entity-search-row input {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.wiz-entity-search-row input:focus {
+  border-color: var(--accent);
+}
+
+.wiz-entity-search-row select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.wiz-entity-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.wiz-entity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.wiz-entity-row:last-child {
+  border-bottom: none;
+}
+
+.wiz-entity-row:hover {
+  background: var(--surface-hover);
+}
+
+.wiz-entity-row.assigned {
+  background: var(--accent-glow);
+}
+
+.wiz-entity-row.used-elsewhere {
+  opacity: 0.4;
+}
+
+.wiz-entity-row input[type="checkbox"] {
+  flex-shrink: 0;
+}
+
+.wiz-entity-domain {
+  min-width: 75px;
+  font-family: monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.wiz-entity-id {
+  flex: 2;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+.wiz-entity-fname {
+  flex: 2;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+/* --- Buttons --- */
+.wiz-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wiz-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wiz-btn-primary {
+  background: var(--accent);
+  color: #111;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.wiz-btn-primary:hover {
+  opacity: 0.9;
+  color: #111;
+}
+
+.wiz-btn-add {
+  width: 100%;
+  text-align: center;
+  border-style: dashed;
+}
+
+.wiz-btn-danger {
+  color: #f87171;
+  border-color: #f87171;
+}
+
+.wiz-btn-danger:hover {
+  background: rgba(248, 113, 113, 0.1);
+  color: #f87171;
+}
+
+.wiz-btn-small {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+.wiz-btn-large {
+  padding: 0.7rem 2rem;
+  font-size: 1rem;
+}
+
+/* --- Navigation --- */
+.wiz-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 0;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+}
+
+.wiz-step-dots {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.wiz-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wiz-dot:hover {
+  border-color: var(--accent);
+}
+
+.wiz-dot.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+
+.wiz-dot.done {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Preview (Step 5) --- */
+.wiz-preview-stats {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.wiz-preview {
+  width: 100%;
+  min-height: 300px;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.wiz-save-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.8rem;
+}
+
+.wiz-save-result {
+  font-size: 0.85rem;
+}
+
+/* --- Section labels --- */
+.wiz-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-heading);
+  margin: 0.8rem 0 0.4rem 0;
+}
+
+.wiz-section-hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+/* --- Sortable list --- */
+.wiz-sortable-list {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-height: 40px;
+  background: var(--bg);
+}
+
+.wiz-sortable-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  background: var(--surface);
+  transition: background 0.1s;
+}
+
+.wiz-sortable-item:last-child {
+  border-bottom: none;
+}
+
+.wiz-sortable-item:first-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.wiz-sortable-item:last-child {
+  border-radius: 0 0 8px 8px;
+}
+
+.wiz-sortable-item:only-child {
+  border-radius: 8px;
+}
+
+.wiz-sortable-item.sortable-ghost {
+  opacity: 0.4;
+  background: var(--accent-glow);
+}
+
+.wiz-sortable-item.sortable-chosen {
+  background: var(--accent-glow);
+}
+
+.wiz-drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 0 0.2rem;
+  user-select: none;
+}
+
+.wiz-drag-handle:active {
+  cursor: grabbing;
+}
+
+.wiz-btn-remove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.wiz-btn-remove:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+/* --- Add entity button in available list --- */
+.wiz-btn-add-entity {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.wiz-entity-row {
+  cursor: pointer;
+}

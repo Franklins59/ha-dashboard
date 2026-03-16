@@ -763,3 +763,106 @@ body {
   text-align: center;
   line-height: 1.6;
 }
+
+/* --- Edit Mode --- */
+.edit-save-btn {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #111;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-save-btn:hover {
+  opacity: 0.9;
+}
+
+.edit-save-btn.hidden {
+  display: none;
+}
+
+/* Hide edit controls on touch devices (tablets, phones) */
+@media (hover: none) and (pointer: coarse) {
+  #edit-toggle,
+  .edit-save-btn {
+    display: none !important;
+  }
+}
+
+.edit-active {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: var(--accent-glow) !important;
+}
+
+/* Edit mode body indicator */
+body.edit-mode .header {
+  border-bottom: 2px solid var(--accent);
+}
+
+body.edit-mode .device {
+  cursor: default;
+}
+
+body.edit-mode .device.toggleable:hover {
+  background: var(--bg);
+}
+
+body.edit-mode .device.toggleable:active {
+  transform: none;
+}
+
+/* Drag handles */
+.edit-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--accent);
+  font-size: 0.85rem;
+  user-select: none;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.edit-drag-handle:hover {
+  opacity: 1;
+}
+
+.edit-drag-handle:active {
+  cursor: grabbing;
+}
+
+.device-handle {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  font-size: 0.75rem;
+}
+
+body.edit-mode .device {
+  position: relative;
+}
+
+.room-handle {
+  margin-right: 0.3rem;
+}
+
+.sidebar-handle {
+  font-size: 0.7rem;
+  margin-right: 0.2rem;
+}
+
+/* Ghost and chosen states */
+.edit-ghost {
+  opacity: 0.3;
+}
+
+.edit-chosen {
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 10px;
+}
