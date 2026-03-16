@@ -7,6 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <title>franklins dash</title>
   <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#111111">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body data-theme="dark">
@@ -45,6 +47,42 @@
     </div>
   </div>
 
+  <!-- Climate Modal -->
+  <div class="modal-backdrop hidden" id="climate-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="climate-modal-title">🌡️ Temperatur</span>
+        <button class="modal-close" onclick="closeClimateModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="climate-current">
+          <span class="climate-label">Aktuell</span>
+          <span class="climate-current-value" id="climate-current">—</span>
+        </div>
+        <div class="climate-target">
+          <span class="climate-label">Sollwert</span>
+          <div class="climate-controls">
+            <button class="climate-btn" onclick="adjustTarget(-0.5)">−</button>
+            <span class="climate-target-value" id="climate-target">—</span>
+            <button class="climate-btn" onclick="adjustTarget(+0.5)">+</button>
+          </div>
+          <input type="range" class="climate-slider" id="climate-slider" min="7" max="28" step="0.5" value="20" oninput="updateTargetDisplay(this.value)" onchange="setTargetTemp(this.value)">
+        </div>
+        <div class="climate-mode">
+          <span class="climate-label">Modus</span>
+          <div class="climate-mode-buttons">
+            <button class="climate-mode-btn" data-mode="heat" onclick="setClimateMode('heat')">🔥 Heizen</button>
+            <button class="climate-mode-btn" data-mode="off" onclick="setClimateMode('off')">⏹ Aus</button>
+          </div>
+        </div>
+        <div class="climate-info">
+          <span class="climate-label">Ventilstellung</span>
+          <span class="climate-info-value" id="climate-output">—</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // --- State ---
     let ws = null;
@@ -55,6 +93,7 @@
     let entityAttrs = {};
     let themeMode = "auto";
     let activeGroup = null;
+    let climateEntityId = null;
 
     const ICONS = {
       switch:  { on: "💡", off: "🔅" },
@@ -62,6 +101,7 @@
       cover:   { on: "🪟", off: "🪟" },
       input_boolean: { on: "✅", off: "⬜" },
       automation: { on: "✅", off: "⬜" },
+      climate: { on: "🔥", off: "❄️" },
       scene: "🎬",
       sensor_temp: "🌡️",
       sensor_humidity: "💧",
@@ -201,6 +241,7 @@
           else if (dev.type === "cover") card = createCoverCard(dev);
           else if (dev.type === "sensor") card = createSensorCard(dev);
           else if (dev.type === "scene") card = createSceneCard(dev);
+          else if (dev.type === "climate") card = createClimateCard(dev);
           if (card) grid.appendChild(card);
         }
 
@@ -329,6 +370,94 @@
       return card;
     }
 
+    function createClimateCard(dev) {
+      const card = document.createElement("div");
+      card.className = "device climate-card";
+      card.id = `dev-${dev.entity_id}`;
+      card.dataset.entityId = dev.entity_id;
+      card.dataset.type = "climate";
+      card.dataset.name = dev.name;
+
+      card.innerHTML = `
+        <div class="device-icon">🌡️</div>
+        <div class="device-name">${dev.name}</div>
+        <div class="climate-card-temps">
+          <span class="climate-card-current">—°C</span>
+          <span class="climate-card-arrow">→</span>
+          <span class="climate-card-target">—°C</span>
+        </div>
+        <div class="device-state">—</div>
+      `;
+
+      card.addEventListener("click", () => openClimateModal(dev.entity_id, dev.name));
+      return card;
+    }
+
+    // === CLIMATE MODAL ===
+    function openClimateModal(entityId, name) {
+      climateEntityId = entityId;
+      document.getElementById("climate-modal-title").textContent = `🌡️ ${name}`;
+
+      const state = entityStates[entityId] || "unknown";
+      const attrs = entityAttrs[entityId] || {};
+
+      const current = attrs.current_temperature;
+      document.getElementById("climate-current").textContent =
+        current !== undefined ? `${current.toFixed(1)} °C` : "—";
+
+      const target = attrs.temperature || 20;
+      document.getElementById("climate-target").textContent = `${target.toFixed(1)} °C`;
+      document.getElementById("climate-slider").value = target;
+      document.getElementById("climate-slider").min = attrs.min_temp || 7;
+      document.getElementById("climate-slider").max = attrs.max_temp || 28;
+      document.getElementById("climate-slider").step = attrs.target_temp_step || 0.5;
+
+      document.querySelectorAll(".climate-mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === state);
+      });
+
+      const output = attrs.control_output;
+      document.getElementById("climate-output").textContent =
+        output !== undefined ? `${output.toFixed(0)} %` : "—";
+
+      document.getElementById("climate-modal").classList.remove("hidden");
+    }
+
+    function closeClimateModal() {
+      document.getElementById("climate-modal").classList.add("hidden");
+      climateEntityId = null;
+    }
+
+    function updateTargetDisplay(value) {
+      document.getElementById("climate-target").textContent = `${parseFloat(value).toFixed(1)} °C`;
+    }
+
+    function adjustTarget(delta) {
+      const slider = document.getElementById("climate-slider");
+      const newVal = Math.max(parseFloat(slider.min),
+        Math.min(parseFloat(slider.max), parseFloat(slider.value) + delta));
+      slider.value = newVal;
+      updateTargetDisplay(newVal);
+      setTargetTemp(newVal);
+    }
+
+    function setTargetTemp(temp) {
+      if (!climateEntityId) return;
+      callService("climate", "set_temperature", climateEntityId, { temperature: parseFloat(temp) });
+    }
+
+    function setClimateMode(mode) {
+      if (!climateEntityId) return;
+      callService("climate", "set_hvac_mode", climateEntityId, { hvac_mode: mode });
+      document.querySelectorAll(".climate-mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === mode);
+      });
+    }
+
+    document.getElementById("climate-modal").addEventListener("click", (e) => {
+      if (e.target.classList.contains("modal-backdrop")) closeClimateModal();
+    });
+
     // === HA WEBSOCKET ===
     function connectHA() {
       const haUrl = `ws://${settings.ha.url}:${settings.ha.port}/api/websocket`;
@@ -430,6 +559,12 @@
       if (type === "switch" || type === "light" || type === "input_boolean" || type === "automation") updateToggleUI(card, type, state, attrs);
       else if (type === "cover") updateCoverUI(card, state, attrs);
       else if (type === "sensor") updateSensorUI(card, state);
+      else if (type === "climate") updateClimateUI(card, state, attrs);
+
+      // Also update open modal if this entity is shown
+      if (climateEntityId === entityId && type === "climate") {
+        updateClimateModal(state, attrs);
+      }
     }
 
     function updateToggleUI(card, type, state, attrs) {
@@ -484,6 +619,36 @@
       }
     }
 
+    function updateClimateUI(card, state, attrs) {
+      const isHeating = state === "heat";
+      card.className = `device climate-card${isHeating ? " heating" : ""}`;
+
+      const current = attrs.current_temperature;
+      const target = attrs.temperature;
+      card.querySelector(".climate-card-current").textContent =
+        current !== undefined ? `${current.toFixed(1)}°C` : "—";
+      card.querySelector(".climate-card-target").textContent =
+        target !== undefined ? `${target.toFixed(1)}°C` : "—";
+
+      const hvacAction = attrs.hvac_action || state;
+      const labels = { heating: "Heizt", idle: "Bereit", off: "Aus" };
+      card.querySelector(".device-state").textContent = labels[hvacAction] || state;
+    }
+
+    function updateClimateModal(state, attrs) {
+      const current = attrs.current_temperature;
+      document.getElementById("climate-current").textContent =
+        current !== undefined ? `${current.toFixed(1)} °C` : "—";
+
+      const output = attrs.control_output;
+      document.getElementById("climate-output").textContent =
+        output !== undefined ? `${output.toFixed(0)} %` : "—";
+
+      document.querySelectorAll(".climate-mode-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.mode === state);
+      });
+    }
+
     // === HELPERS ===
     function setStatus(connected) {
       document.getElementById("status-dot").className = `status-dot${connected ? " connected" : ""}`;
@@ -502,6 +667,13 @@
     }
 
     // === GO ===
+    // Prevent overscroll/bounce on body, allow inside .main and .sidebar
+    document.addEventListener("touchmove", function(e) {
+      if (!e.target.closest(".main") && !e.target.closest(".sidebar")) {
+        e.preventDefault();
+      }
+    }, { passive: false });
+
     init();
   </script>
 </body>
