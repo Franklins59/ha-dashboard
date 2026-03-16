@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>franklins dash — Wetterstation</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/weather.css">
+  <script src="/static/lib/chart.umd.min.js"></script>
+</head>
+<body data-theme="dark">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <a href="/" class="back-btn" title="Zurück zum Dashboard">←</a>
+      <img src="/static/logo.png" class="header-logo" alt="franklins">
+      <div class="header-title">Wetterstation</div>
+    </div>
+    <div class="header-right">
+      <div class="wx-range-btns">
+        <button class="wx-range-btn active" data-hours="24" onclick="setRange(24)">24h</button>
+        <button class="wx-range-btn" data-hours="48" onclick="setRange(48)">48h</button>
+        <button class="wx-range-btn" data-hours="168" onclick="setRange(168)">7d</button>
+      </div>
+      <span class="header-clock" id="clock"></span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="wx-content">
+    <!-- Current values -->
+    <div class="wx-current" id="wx-current">
+      <div class="wx-card">
+        <div class="wx-card-icon">🌡️</div>
+        <div class="wx-card-value" id="wx-temp">—</div>
+        <div class="wx-card-label">Temperatur</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">💧</div>
+        <div class="wx-card-value" id="wx-humidity">—</div>
+        <div class="wx-card-label">Feuchtigkeit</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">💨</div>
+        <div class="wx-card-value" id="wx-wind">—</div>
+        <div class="wx-card-label">Wind</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">🧭</div>
+        <div class="wx-card-value" id="wx-wind-dir">—</div>
+        <div class="wx-card-label">Windrichtung</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">🌧️</div>
+        <div class="wx-card-value" id="wx-rain">—</div>
+        <div class="wx-card-label">Regen gesamt</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">☀️</div>
+        <div class="wx-card-value" id="wx-sun">—</div>
+        <div class="wx-card-label">Sonnenschein</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-icon">💡</div>
+        <div class="wx-card-value" id="wx-lux">—</div>
+        <div class="wx-card-label">Helligkeit</div>
+      </div>
+    </div>
+
+    <!-- Indoor vs outdoor temp comparison -->
+    <div class="wx-indoor-strip" id="wx-indoor">
+      <span class="wx-indoor-label">Innen:</span>
+      <span class="wx-indoor-item" id="wx-in-wohnen">Wohnen —</span>
+      <span class="wx-indoor-item" id="wx-in-buero">Büro —</span>
+      <span class="wx-indoor-item" id="wx-in-schlafen">Schlafen —</span>
+      <span class="wx-indoor-item" id="wx-in-werkstatt">Werkstatt —</span>
+    </div>
+
+    <!-- Charts -->
+    <div class="wx-charts">
+      <div class="wx-chart-container">
+        <div class="wx-chart-title">Temperatur (aussen / innen)</div>
+        <canvas id="chart-temp"></canvas>
+      </div>
+      <div class="wx-chart-container">
+        <div class="wx-chart-title">Luftfeuchtigkeit</div>
+        <canvas id="chart-humidity"></canvas>
+      </div>
+      <div class="wx-chart-container">
+        <div class="wx-chart-title">Wind</div>
+        <canvas id="chart-wind"></canvas>
+      </div>
+      <div class="wx-chart-container">
+        <div class="wx-chart-title">Niederschlag (kumulativ)</div>
+        <canvas id="chart-rain"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const ENTITIES = {
+      temp_out: "sensor.hmip_swo_pr_terrasse_temperatur",
+      humidity_out: "sensor.hmip_swo_pr_terrasse_luftfeuchtigkeit",
+      wind_speed: "sensor.hmip_swo_pr_terrasse_windgeschwindigkeit",
+      wind_dir: "sensor.hmip_swo_pr_terrasse_windrichtung",
+      wind_dir2: "sensor.hmip_swo_pr_terrasse_windrichtung_2",
+      rain: "sensor.hmip_swo_pr_terrasse_regenzahler_gesamt",
+      sun: "sensor.hmip_swo_pr_terrasse_sonnenscheindauer",
+      lux: "sensor.hmip_swo_pr_terrasse_beleuchtungsstarke",
+      temp_wohnen: "sensor.hmip_wth_2_wohnen_temperatur",
+      temp_buero: "sensor.hmip_wth_2_buro_temperatur",
+      temp_schlafen: "sensor.hmip_sthd_schlafen_temperatur",
+      temp_werkstatt: "sensor.hmip_sthd_werkstatt_temperatur",
+      hum_wohnen: "sensor.hmip_wth_2_wohnen_luftfeuchtigkeit",
+      hum_buero: "sensor.hmip_wth_2_buro_luftfeuchtigkeit"
+    };
+
+    let currentRange = 24;
+    let charts = {};
+
+    // Wind direction number to compass
+    function windDirLabel(deg) {
+      if (deg === null || deg === undefined || isNaN(deg)) return "—";
+      const dirs = ["N", "NNO", "NO", "ONO", "O", "OSO", "SO", "SSO", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+      return dirs[Math.round(parseFloat(deg) / 22.5) % 16];
+    }
+
+    // === THEME ===
+    async function applyTheme() {
+      let themeSetting = "auto";
+      // Check localStorage first (set by dashboard theme toggle)
+      try {
+        const stored = localStorage.getItem("fd-theme");
+        if (stored) { themeSetting = stored; }
+      } catch(e) {}
+
+      // Fall back to settings.json if no localStorage override
+      if (themeSetting === "auto") {
+        try {
+          const res = await fetch("/api/settings");
+          const s = await res.json();
+          themeSetting = s.theme || "auto";
+        } catch (e) {}
+      }
+
+      const h = new Date().getHours();
+      const resolved = themeSetting === "auto" ? (h >= 7 && h < 20 ? "light" : "dark") : themeSetting;
+      document.body.setAttribute("data-theme", resolved);
+    }
+
+    // === CLOCK ===
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("clock").textContent =
+        String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+    }
+    updateClock();
+    setInterval(updateClock, 10000);
+
+    // === CURRENT VALUES ===
+    async function loadCurrentValues() {
+      try {
+        const res = await fetch("/api/ha/entities");
+        const entities = await res.json();
+        const val = (id) => {
+          const e = entities.find(x => x.entity_id === id);
+          return e ? e.state : null;
+        };
+
+        const temp = val(ENTITIES.temp_out);
+        document.getElementById("wx-temp").textContent = temp ? `${parseFloat(temp).toFixed(1)} °C` : "—";
+
+        const hum = val(ENTITIES.humidity_out);
+        document.getElementById("wx-humidity").textContent = hum ? `${parseFloat(hum).toFixed(0)} %` : "—";
+
+        const wind = val(ENTITIES.wind_speed);
+        document.getElementById("wx-wind").textContent = wind ? `${parseFloat(wind).toFixed(1)} km/h` : "—";
+
+        const wdir = val(ENTITIES.wind_dir);
+        document.getElementById("wx-wind-dir").textContent = windDirLabel(wdir);
+
+        const rain = val(ENTITIES.rain);
+        document.getElementById("wx-rain").textContent = rain ? `${parseFloat(rain).toFixed(1)} mm` : "—";
+
+        const sun = val(ENTITIES.sun);
+        document.getElementById("wx-sun").textContent = sun ? `${parseFloat(sun).toFixed(0)} min` : "—";
+
+        const lux = val(ENTITIES.lux);
+        document.getElementById("wx-lux").textContent = lux ? `${parseFloat(lux).toFixed(0)} lx` : "—";
+
+        // Indoor temps
+        const tw = val(ENTITIES.temp_wohnen);
+        document.getElementById("wx-in-wohnen").textContent = `Wohnen ${tw ? parseFloat(tw).toFixed(1) + "°" : "—"}`;
+        const tb = val(ENTITIES.temp_buero);
+        document.getElementById("wx-in-buero").textContent = `Büro ${tb ? parseFloat(tb).toFixed(1) + "°" : "—"}`;
+        const ts = val(ENTITIES.temp_schlafen);
+        document.getElementById("wx-in-schlafen").textContent = `Schlafen ${ts ? parseFloat(ts).toFixed(1) + "°" : "—"}`;
+        const tkw = val(ENTITIES.temp_werkstatt);
+        document.getElementById("wx-in-werkstatt").textContent = `Werkstatt ${tkw ? parseFloat(tkw).toFixed(1) + "°" : "—"}`;
+      } catch (e) {
+        console.error("Failed to load current values:", e);
+      }
+    }
+
+    // === HISTORY / CHARTS ===
+    function getChartColors() {
+      const isDark = document.body.dataset.theme === "dark";
+      return {
+        grid: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+        text: isDark ? "#888" : "#666",
+        tempOut: "#f59e0b",
+        tempWohnen: "#3ddc84",
+        tempBuero: "#5ba8f5",
+        tempSchlafen: "#a78bfa",
+        tempWerkstatt: "#f87171",
+        humidity: "#5ba8f5",
+        humIn: "#3ddc84",
+        wind: "#60a5fa",
+        windGust: "#f87171",
+        rain: "#38bdf8"
+      };
+    }
+
+    function parseHistory(historyData, entityId) {
+      const series = historyData.find(arr => arr.length > 0 && arr[0].entity_id === entityId);
+      if (!series) return [];
+      return series
+        .filter(p => p.state !== "unavailable" && p.state !== "unknown")
+        .map(p => ({ x: new Date(p.last_changed).getTime(), y: parseFloat(p.state) }))
+        .filter(p => !isNaN(p.y));
+    }
+
+    function chartOptions(yLabel, colors) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { labels: { color: colors.text, boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              title: function(items) {
+                if (!items.length) return "";
+                const d = new Date(items[0].parsed.x);
+                return d.toLocaleDateString("de-CH") + " " +
+                  d.getHours().toString().padStart(2, "0") + ":" +
+                  d.getMinutes().toString().padStart(2, "0");
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: "linear",
+            ticks: {
+              color: colors.text,
+              font: { size: 10 },
+              maxTicksLimit: 8,
+              callback: function(val) {
+                const d = new Date(val);
+                const h = d.getHours().toString().padStart(2, "0");
+                const m = d.getMinutes().toString().padStart(2, "0");
+                if (currentRange > 48) {
+                  return d.getDate() + "." + (d.getMonth() + 1) + ". " + h + ":" + m;
+                }
+                return h + ":" + m;
+              }
+            },
+            grid: { color: colors.grid }
+          },
+          y: {
+            ticks: { color: colors.text, font: { size: 10 } },
+            grid: { color: colors.grid },
+            title: { display: true, text: yLabel, color: colors.text, font: { size: 11 } }
+          }
+        }
+      };
+    }
+
+    function makeDataset(label, data, color, fill) {
+      return {
+        label, data,
+        borderColor: color,
+        backgroundColor: fill ? color + "20" : "transparent",
+        fill: !!fill,
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.3
+      };
+    }
+
+    async function loadCharts() {
+      const allIds = [
+        ENTITIES.temp_out, ENTITIES.humidity_out, ENTITIES.wind_speed,
+        ENTITIES.rain, ENTITIES.temp_wohnen, ENTITIES.temp_buero,
+        ENTITIES.temp_schlafen, ENTITIES.temp_werkstatt,
+        ENTITIES.hum_wohnen, ENTITIES.hum_buero
+      ].join(",");
+
+      try {
+        console.log("Fetching history for", currentRange, "hours...");
+        const res = await fetch(`/api/ha/history?entity_ids=${allIds}&hours=${currentRange}`);
+        const history = await res.json();
+
+        if (history.error) {
+          console.error("History API error:", history.error);
+          return;
+        }
+
+        console.log("History response: arrays=" + history.length);
+        history.forEach((arr, i) => {
+          if (arr.length > 0) console.log("  " + arr[0].entity_id + ": " + arr.length + " points");
+        });
+
+        const c = getChartColors();
+
+        // Destroy old charts
+        Object.values(charts).forEach(ch => ch.destroy());
+        charts = {};
+
+        const tempOutData = parseHistory(history, ENTITIES.temp_out);
+        console.log("Parsed temp_out:", tempOutData.length, "points");
+
+        // Temperature chart
+        charts.temp = new Chart(document.getElementById("chart-temp"), {
+          type: "line",
+          data: {
+            datasets: [
+              makeDataset("Aussen", tempOutData, c.tempOut),
+              makeDataset("Wohnen", parseHistory(history, ENTITIES.temp_wohnen), c.tempWohnen),
+              makeDataset("Büro", parseHistory(history, ENTITIES.temp_buero), c.tempBuero),
+              makeDataset("Schlafen", parseHistory(history, ENTITIES.temp_schlafen), c.tempSchlafen),
+              makeDataset("Werkstatt", parseHistory(history, ENTITIES.temp_werkstatt), c.tempWerkstatt)
+            ]
+          },
+          options: chartOptions("°C", c)
+        });
+
+        // Humidity chart
+        charts.humidity = new Chart(document.getElementById("chart-humidity"), {
+          type: "line",
+          data: {
+            datasets: [
+              makeDataset("Aussen", parseHistory(history, ENTITIES.humidity_out), c.humidity),
+              makeDataset("Wohnen", parseHistory(history, ENTITIES.hum_wohnen), c.humIn),
+              makeDataset("Büro", parseHistory(history, ENTITIES.hum_buero), c.tempBuero)
+            ]
+          },
+          options: chartOptions("%", c)
+        });
+
+        // Wind chart
+        charts.wind = new Chart(document.getElementById("chart-wind"), {
+          type: "line",
+          data: {
+            datasets: [
+              makeDataset("Geschwindigkeit", parseHistory(history, ENTITIES.wind_speed), c.wind, true)
+            ]
+          },
+          options: chartOptions("km/h", c)
+        });
+
+        // Rain chart
+        charts.rain = new Chart(document.getElementById("chart-rain"), {
+          type: "line",
+          data: {
+            datasets: [
+              makeDataset("Niederschlag", parseHistory(history, ENTITIES.rain), c.rain, true)
+            ]
+          },
+          options: chartOptions("mm", c)
+        });
+
+      } catch (e) {
+        console.error("Failed to load history:", e);
+      }
+    }
+
+    function setRange(hours) {
+      currentRange = hours;
+      document.querySelectorAll(".wx-range-btn").forEach(btn => {
+        btn.classList.toggle("active", parseInt(btn.dataset.hours) === hours);
+      });
+      loadCharts();
+    }
+
+    // === INIT ===
+    async function init() {
+      await applyTheme();
+      await loadCurrentValues();
+      await loadCharts();
+      // Refresh current values every 60s
+      setInterval(loadCurrentValues, 60000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

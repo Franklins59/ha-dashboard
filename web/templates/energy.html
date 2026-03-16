@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>franklins dash — Energie</title>
+  <link rel="icon" href="/static/logo.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/energy.css">
+  <script src="/static/lib/chart.umd.min.js"></script>
+</head>
+<body data-theme="dark">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <a href="/" class="back-btn" title="Zurück zum Dashboard">←</a>
+      <img src="/static/logo.png" class="header-logo" alt="franklins">
+      <div class="header-title">Energie</div>
+    </div>
+    <div class="header-right">
+      <div class="wx-range-btns">
+        <button class="wx-range-btn active" data-hours="24" onclick="setRange(24)">24h</button>
+        <button class="wx-range-btn" data-hours="48" onclick="setRange(48)">48h</button>
+        <button class="wx-range-btn" data-hours="168" onclick="setRange(168)">7d</button>
+      </div>
+      <span class="header-clock" id="clock"></span>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="nrg-content">
+
+    <!-- Live power -->
+    <div class="nrg-live-section">
+      <div class="nrg-total">
+        <div class="nrg-total-label">Gesamtleistung</div>
+        <div class="nrg-total-value" id="nrg-total">—</div>
+        <div class="nrg-total-unit">Watt</div>
+      </div>
+      <div class="nrg-phases">
+        <div class="nrg-phase">
+          <div class="nrg-phase-label">Phase A</div>
+          <div class="nrg-phase-bar-bg"><div class="nrg-phase-bar" id="nrg-bar-a" style="width:0%"></div></div>
+          <div class="nrg-phase-values">
+            <span class="nrg-phase-power" id="nrg-power-a">— W</span>
+            <span class="nrg-phase-detail" id="nrg-detail-a">— V · — A</span>
+          </div>
+        </div>
+        <div class="nrg-phase">
+          <div class="nrg-phase-label">Phase B</div>
+          <div class="nrg-phase-bar-bg"><div class="nrg-phase-bar phase-b" id="nrg-bar-b" style="width:0%"></div></div>
+          <div class="nrg-phase-values">
+            <span class="nrg-phase-power" id="nrg-power-b">— W</span>
+            <span class="nrg-phase-detail" id="nrg-detail-b">— V · — A</span>
+          </div>
+        </div>
+        <div class="nrg-phase">
+          <div class="nrg-phase-label">Phase C</div>
+          <div class="nrg-phase-bar-bg"><div class="nrg-phase-bar phase-c" id="nrg-bar-c" style="width:0%"></div></div>
+          <div class="nrg-phase-values">
+            <span class="nrg-phase-power" id="nrg-power-c">— W</span>
+            <span class="nrg-phase-detail" id="nrg-detail-c">— V · — A</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts + Top consumers side by side -->
+    <div class="nrg-bottom">
+      <div class="nrg-chart-container">
+        <div class="nrg-chart-title">Leistungsverlauf</div>
+        <canvas id="chart-power"></canvas>
+      </div>
+      <div class="nrg-top-consumers">
+        <div class="nrg-chart-title">Aktuelle Verbraucher</div>
+        <div class="nrg-consumer-list" id="nrg-consumers"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // === STATE ===
+    let energyConfig = null;
+    let allEntities = [];
+    let currentRange = 24;
+    let powerChart = null;
+
+    const PHASE_COLORS = ["#3ddc84", "#5ba8f5", "#f87171"];
+    const PHASE_CSS = ["", "phase-b", "phase-c"];
+
+    // === THEME ===
+    async function applyTheme() {
+      let themeSetting = null;
+      try { themeSetting = localStorage.getItem("fd-theme"); } catch(e) {}
+      if (!themeSetting) {
+        try {
+          const res = await fetch("/api/settings");
+          const s = await res.json();
+          themeSetting = s.theme || "auto";
+        } catch(e) { themeSetting = "light"; }
+      }
+      const h = new Date().getHours();
+      document.body.setAttribute("data-theme",
+        themeSetting === "auto" ? (h >= 7 && h < 20 ? "light" : "dark") : themeSetting);
+    }
+
+    // === CLOCK ===
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("clock").textContent =
+        String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0");
+    }
+    updateClock();
+    setInterval(updateClock, 10000);
+
+    // === LIVE VALUES ===
+    async function loadLiveValues() {
+      if (!energyConfig) return;
+      try {
+        const res = await fetch("/api/ha/entities");
+        allEntities = await res.json();
+        const val = (id) => {
+          const e = allEntities.find(x => x.entity_id === id);
+          return e && e.state !== "unavailable" && e.state !== "unknown" ? parseFloat(e.state) : null;
+        };
+
+        // Total power
+        const total = val(energyConfig.total);
+        document.getElementById("nrg-total").textContent =
+          total !== null ? Math.round(Math.abs(total)).toLocaleString("de-CH") : "—";
+
+        // Phases from config
+        const phaseIds = ["a", "b", "c"];
+        const phases = energyConfig.phases || [];
+        const maxPower = energyConfig.max_phase_power || 3680;
+        for (let i = 0; i < phaseIds.length; i++) {
+          const phase = phases[i];
+          if (!phase) { updatePhase(phaseIds[i], null, null, null, false, maxPower); continue; }
+          updatePhase(
+            phaseIds[i],
+            val(phase.power),
+            val(phase.voltage),
+            val(phase.current),
+            phase.invert || false,
+            maxPower
+          );
+          // Update phase label if configured
+          const labelEl = document.querySelector(`#nrg-bar-${phaseIds[i]}`)?.closest(".nrg-phase")?.querySelector(".nrg-phase-label");
+          if (labelEl && phase.name) labelEl.textContent = phase.name;
+        }
+
+        // Auto-detect consumers: all *_power or *_leistung entities
+        const consumers = [];
+        // Build exclusion set: all configured energy entities
+        const excludeIds = new Set([energyConfig.total]);
+        for (const p of phases) {
+          if (p.power) excludeIds.add(p.power);
+          if (p.voltage) excludeIds.add(p.voltage);
+          if (p.current) excludeIds.add(p.current);
+        }
+        for (const e of allEntities) {
+          if (e.domain !== "sensor") continue;
+          if (!e.entity_id.endsWith("_power") && !e.entity_id.endsWith("_leistung")) continue;
+          // Skip all 3EM / energy meter entities
+          if (excludeIds.has(e.entity_id)) continue;
+          if (e.entity_id.includes("3em") || e.entity_id.includes("shellyem3")) continue;
+          const power = parseFloat(e.state);
+          if (isNaN(power) || Math.abs(power) < 0.1) continue;
+          const name = e.friendly_name || e.entity_id.replace("sensor.", "").replace(/_/g, " ");
+          consumers.push({ name, power: Math.abs(power) });
+        }
+        consumers.sort((a, b) => b.power - a.power);
+        renderConsumers(consumers);
+
+      } catch (e) {
+        console.error("Failed to load live values:", e);
+      }
+    }
+
+    function updatePhase(phase, power, voltage, current, invert, maxPower) {
+      const pEl = document.getElementById(`nrg-power-${phase}`);
+      const dEl = document.getElementById(`nrg-detail-${phase}`);
+      const bEl = document.getElementById(`nrg-bar-${phase}`);
+
+      if (power !== null) {
+        const displayPower = invert ? -power : power;
+        pEl.textContent = `${Math.round(displayPower)} W`;
+        const pct = Math.min(100, Math.max(0, (Math.abs(power) / maxPower) * 100));
+        bEl.style.width = pct + "%";
+      } else {
+        pEl.textContent = "— W";
+        bEl.style.width = "0%";
+      }
+
+      if (voltage !== null && current !== null) {
+        dEl.textContent = `${voltage.toFixed(0)} V · ${current.toFixed(1)} A`;
+      } else {
+        dEl.textContent = "— V · — A";
+      }
+    }
+
+    function renderConsumers(consumers) {
+      const list = document.getElementById("nrg-consumers");
+      if (consumers.length === 0) {
+        list.innerHTML = '<div class="nrg-consumer-empty">Kein aktiver Verbrauch</div>';
+        return;
+      }
+      const maxPower = consumers[0].power;
+      list.innerHTML = consumers.slice(0, 15).map(c => {
+        const pct = (c.power / maxPower * 100).toFixed(0);
+        return `
+          <div class="nrg-consumer-row">
+            <span class="nrg-consumer-name">${c.name}</span>
+            <div class="nrg-consumer-bar-bg">
+              <div class="nrg-consumer-bar" style="width:${pct}%"></div>
+            </div>
+            <span class="nrg-consumer-power">${c.power.toFixed(1)} W</span>
+          </div>`;
+      }).join("");
+    }
+
+    // === HISTORY CHART ===
+    function getChartColors() {
+      const isDark = document.body.dataset.theme === "dark";
+      return {
+        grid: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+        text: isDark ? "#888" : "#666",
+        total: "#fbbf24"
+      };
+    }
+
+    function parseHistory(historyData, entityId, invert) {
+      const series = historyData.find(arr => arr.length > 0 && arr[0].entity_id === entityId);
+      if (!series) return [];
+      return series
+        .filter(p => p.state !== "unavailable" && p.state !== "unknown")
+        .map(p => ({
+          x: new Date(p.last_changed).getTime(),
+          y: invert ? -parseFloat(p.state) : parseFloat(p.state)
+        }))
+        .filter(p => !isNaN(p.y));
+    }
+
+    async function loadChart() {
+      if (!energyConfig) return;
+      const phases = energyConfig.phases || [];
+      const ids = [energyConfig.total, ...phases.map(p => p.power)].filter(Boolean).join(",");
+
+      try {
+        const res = await fetch(`/api/ha/history?entity_ids=${ids}&hours=${currentRange}`);
+        const history = await res.json();
+        if (history.error) { console.error(history.error); return; }
+
+        const c = getChartColors();
+        if (powerChart) powerChart.destroy();
+
+        const datasets = [
+          {
+            label: "Gesamt", data: parseHistory(history, energyConfig.total, false),
+            borderColor: c.total, backgroundColor: c.total + "15",
+            fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3
+          }
+        ];
+
+        phases.forEach((phase, i) => {
+          datasets.push({
+            label: phase.name || `Phase ${i+1}`,
+            data: parseHistory(history, phase.power, phase.invert || false),
+            borderColor: PHASE_COLORS[i] || "#999",
+            borderWidth: 1, pointRadius: 0, tension: 0.3
+          });
+        });
+
+        powerChart = new Chart(document.getElementById("chart-power"), {
+          type: "line",
+          data: { datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: { labels: { color: c.text, boxWidth: 12, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  title: function(items) {
+                    if (!items.length) return "";
+                    const d = new Date(items[0].parsed.x);
+                    return d.toLocaleDateString("de-CH") + " " +
+                      d.getHours().toString().padStart(2, "0") + ":" +
+                      d.getMinutes().toString().padStart(2, "0");
+                  },
+                  label: function(ctx) {
+                    return `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)} W`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: "linear",
+                ticks: {
+                  color: c.text, font: { size: 10 }, maxTicksLimit: 8,
+                  callback: function(val) {
+                    const d = new Date(val);
+                    const h = d.getHours().toString().padStart(2, "0");
+                    const m = d.getMinutes().toString().padStart(2, "0");
+                    if (currentRange > 48) return d.getDate() + "." + (d.getMonth()+1) + ". " + h + ":" + m;
+                    return h + ":" + m;
+                  }
+                },
+                grid: { color: c.grid }
+              },
+              y: {
+                ticks: { color: c.text, font: { size: 10 } },
+                grid: { color: c.grid },
+                title: { display: true, text: "Watt", color: c.text, font: { size: 11 } }
+              }
+            }
+          }
+        });
+      } catch (e) {
+        console.error("Failed to load chart:", e);
+      }
+    }
+
+    function setRange(hours) {
+      currentRange = hours;
+      document.querySelectorAll(".wx-range-btn").forEach(btn => {
+        btn.classList.toggle("active", parseInt(btn.dataset.hours) === hours);
+      });
+      loadChart();
+    }
+
+    // === INIT ===
+    async function init() {
+      await applyTheme();
+
+      // Load energy config from settings
+      try {
+        const res = await fetch("/api/settings");
+        const settings = await res.json();
+        energyConfig = settings.energy;
+        if (!energyConfig) {
+          document.querySelector(".nrg-content").innerHTML =
+            '<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Energiekonfiguration in settings.json gefunden.<br><br>Bitte <code>"energy": { ... }</code> Block hinzufügen.</div>';
+          return;
+        }
+      } catch(e) {
+        console.error("Failed to load settings:", e);
+        return;
+      }
+
+      await loadLiveValues();
+      await loadChart();
+      setInterval(loadLiveValues, 15000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

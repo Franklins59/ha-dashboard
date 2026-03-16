@@ -7,7 +7,7 @@
   <link rel="icon" href="/static/logo.png" type="image/png">
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/wizard.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js"></script>
+  <script src="/static/lib/Sortable.min.js"></script>
 </head>
 <body data-theme="light">
 
@@ -167,14 +167,18 @@
     }
 
     async function applyTheme() {
-      try {
-        const res = await fetch("/api/settings");
-        const s = await res.json();
-        const theme = s.theme || "auto";
-        document.body.dataset.theme = theme === "auto" ? getAutoTheme() : theme;
-      } catch (e) {
-        document.body.dataset.theme = "light";
+      let themeSetting = null;
+      try { themeSetting = localStorage.getItem("fd-theme"); } catch(e) {}
+      if (!themeSetting) {
+        try {
+          const res = await fetch("/api/settings");
+          const s = await res.json();
+          themeSetting = s.theme || "auto";
+        } catch (e) {
+          themeSetting = "light";
+        }
       }
+      document.body.dataset.theme = themeSetting === "auto" ? getAutoTheme() : themeSetting;
     }
 
     // === NAVIGATION ===

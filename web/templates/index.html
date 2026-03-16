@@ -10,7 +10,7 @@
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#111111">
   <link rel="stylesheet" href="/static/style.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js"></script>
+  <script src="/static/lib/Sortable.min.js"></script>
 </head>
 <body data-theme="dark">
 
@@ -34,6 +34,8 @@
       <button class="theme-toggle" id="edit-toggle" title="Anordnung bearbeiten" onclick="toggleEditMode()">✏️</button>
       <button class="edit-save-btn hidden" id="edit-save-btn" onclick="saveEditMode()">💾 Speichern</button>
       <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
+      <a href="/weather" class="theme-toggle" title="Wetterstation">🌤️</a>
+      <a href="/energy" class="theme-toggle" title="Energie">⚡</a>
       <a href="/settings" class="theme-toggle" title="Einstellungen">⚙️</a>
       <div class="status-bar">
         <span id="status-text">Getrennt</span>
@@ -130,7 +132,17 @@
       if (themeMode === "auto") themeMode = "dark";
       else if (themeMode === "dark") themeMode = "light";
       else themeMode = "auto";
+      try { localStorage.setItem("fd-theme", themeMode); } catch(e) {}
       applyTheme();
+    }
+
+    // Load theme: localStorage override > settings.json
+    function loadThemeOverride() {
+      try {
+        const stored = localStorage.getItem("fd-theme");
+        if (stored) { themeMode = stored; return true; }
+      } catch(e) {}
+      return false;
     }
 
     document.getElementById("theme-toggle").addEventListener("click", cycleTheme);
@@ -159,7 +171,9 @@
 
         // Apply settings
         document.getElementById("building-name").textContent = settings.building || "";
-        if (settings.theme) themeMode = settings.theme;
+        if (!loadThemeOverride()) {
+          if (settings.theme) themeMode = settings.theme;
+        }
         applyTheme();
 
         // Set default group (first in list)

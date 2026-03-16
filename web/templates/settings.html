@@ -136,20 +136,23 @@
     }
 
     async function saveSettings() {
-      const data = {
-        building: document.getElementById("s-building").value,
-        ha: {
+      try {
+        // Load existing settings first to preserve energy config etc.
+        const existing = await (await fetch("/api/settings")).json();
+
+        // Merge UI fields on top
+        existing.building = document.getElementById("s-building").value;
+        existing.ha = {
           url: document.getElementById("s-ha-url").value,
           port: parseInt(document.getElementById("s-ha-port").value) || 8123,
           token: document.getElementById("s-ha-token").value
-        },
-        theme: document.getElementById("s-theme").value
-      };
-      try {
+        };
+        existing.theme = document.getElementById("s-theme").value;
+
         const res = await fetch("/api/settings", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
+          body: JSON.stringify(existing)
         });
         const result = await res.json();
         showResult("settings-save-result", result.status === "ok" ? "Gespeichert ✓" : "Fehler", result.status === "ok");
@@ -243,11 +246,16 @@
     function applyTheme(theme) {
       const resolved = theme === "auto" ? getAutoTheme() : theme;
       document.body.dataset.theme = resolved;
+      try { localStorage.setItem("fd-theme", theme); } catch(e) {}
     }
 
     // === INIT ===
     loadSettings().then(() => {
-      applyTheme(document.getElementById("s-theme").value || "auto");
+      // Check localStorage first
+      let theme = null;
+      try { theme = localStorage.getItem("fd-theme"); } catch(e) {}
+      if (!theme) theme = document.getElementById("s-theme").value || "auto";
+      applyTheme(theme);
     });
 
     // Disable config editor on touch devices

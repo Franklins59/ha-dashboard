@@ -5,6 +5,7 @@ Serves a web UI that communicates directly with HA's WebSocket API.
 
 import json
 import requests
+from datetime import datetime, timedelta, timezone
 from flask import Flask, render_template, jsonify, request
 
 app = Flask(
@@ -95,6 +96,54 @@ def ha_entities():
         entities.sort(key=lambda x: x["entity_id"])
         return jsonify(entities)
     except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+@app.route("/weather")
+def weather_page():
+    """Serve the weather station page."""
+    return render_template("weather.html")
+
+
+@app.route("/energy")
+def energy_page():
+    """Serve the energy monitoring page."""
+    return render_template("energy.html")
+
+
+@app.route("/api/ha/history")
+def ha_history():
+    """Proxy: Fetch history data from Home Assistant."""
+    try:
+        settings = load_json("settings.json")
+        ha = settings["ha"]
+        entity_ids = request.args.get("entity_ids", "")
+        hours = request.args.get("hours", "24")
+
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=int(hours))
+
+        # Format timestamps without timezone suffix for HA compatibility
+        start_str = start.strftime("%Y-%m-%dT%H:%M:%S")
+        end_str = end.strftime("%Y-%m-%dT%H:%M:%S")
+
+        base_url = f"http://{ha['url']}:{ha['port']}/api/history/period/{start_str}"
+        params = {
+            "filter_entity_id": entity_ids,
+            "end_time": end_str,
+            "minimal_response": "",
+            "no_attributes": ""
+        }
+        headers = {"Authorization": f"Bearer {ha['token']}"}
+        print(f"[History] Fetching {hours}h for {len(entity_ids.split(','))} entities...")
+        resp = requests.get(base_url, params=params, headers=headers, timeout=30)
+        print(f"[History] HA response: {resp.status_code}")
+        resp.raise_for_status()
+        data = resp.json()
+        print(f"[History] Got {len(data)} entity arrays")
+        return jsonify(data)
+    except Exception as ex:
+        print(f"[History] Error: {ex}")
         return jsonify({"error": str(ex)}), 500
 
 

@@ -5,5 +5,32 @@
     "port": 8123,
     "token": "YOUR_LONG_LIVED_ACCESS_TOKEN"
   },
-  "theme": "auto"
+  "theme": "auto",
+  "energy": {
+    "total": "sensor.your_3em_total_power",
+    "phases": [
+      {
+        "name": "Phase A",
+        "power": "sensor.your_3em_phase_a_power",
+        "voltage": "sensor.your_3em_phase_a_voltage",
+        "current": "sensor.your_3em_phase_a_current",
+        "invert": false
+      },
+      {
+        "name": "Phase B",
+        "power": "sensor.your_3em_phase_b_power",
+        "voltage": "sensor.your_3em_phase_b_voltage",
+        "current": "sensor.your_3em_phase_b_current",
+        "invert": false
+      },
+      {
+        "name": "Phase C",
+        "power": "sensor.your_3em_phase_c_power",
+        "voltage": "sensor.your_3em_phase_c_voltage",
+        "current": "sensor.your_3em_phase_c_current",
+        "invert": false
+      }
+    ],
+    "max_phase_power": 3680
+  }
 }

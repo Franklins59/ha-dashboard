@@ -130,6 +130,26 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font-size: 1.2rem;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.back-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .theme-toggle {
   background: none;
   border: 1px solid var(--border);

@@ -1,0 +1,131 @@
+/* === Weather Station === */
+
+.wx-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* --- Range buttons --- */
+.wx-range-btns {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.wx-range-btn {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wx-range-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wx-range-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+
+/* --- Current values grid --- */
+.wx-current {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.wx-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  text-align: center;
+}
+
+.wx-card-icon {
+  font-size: 1.3rem;
+  margin-bottom: 0.2rem;
+}
+
+.wx-card-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-sensor);
+}
+
+.wx-card-label {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 0.15rem;
+}
+
+/* --- Indoor strip --- */
+.wx-indoor-strip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 0.8rem;
+  font-size: 0.78rem;
+  overflow-x: auto;
+}
+
+.wx-indoor-label {
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wx-indoor-item {
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* --- Charts --- */
+.wx-charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .wx-charts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wx-chart-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  height: 240px;
+  position: relative;
+}
+
+.wx-chart-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-heading);
+  margin-bottom: 0.4rem;
+}
+
+.wx-chart-container canvas {
+  max-height: 190px;
+}
