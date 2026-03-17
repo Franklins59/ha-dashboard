@@ -46,6 +46,29 @@
 }
 
 /* --- Panel sections --- */
+.settings-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .settings-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.settings-col .panel-section {
+  margin-bottom: 0;
+}
+
 .panel-section {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -355,7 +355,7 @@
             <span class="wiz-drag-handle">☰</span>
             <span class="wiz-entity-domain">${d.type}</span>
             <span class="wiz-entity-id">${d.entity_id}</span>
-            <span class="wiz-entity-fname">${d.name}</span>
+            <input type="text" class="wiz-entity-name-input" value="${d.name}" onchange="updateDeviceName(${activeRoomIdx}, '${d.entity_id}', this.value)" onclick="event.stopPropagation()">
             <button class="wiz-btn-remove" onclick="removeEntity(${activeRoomIdx}, '${d.entity_id}')" title="Entfernen">✕</button>
           </div>`;
       }
@@ -463,6 +463,11 @@
       wizRooms[roomIdx].devices = wizRooms[roomIdx].devices.filter(d => d.entity_id !== entityId);
       renderRoomsList();
       renderRoomEditor();
+    }
+
+    function updateDeviceName(roomIdx, entityId, newName) {
+      const dev = wizRooms[roomIdx].devices.find(d => d.entity_id === entityId);
+      if (dev) dev.name = newName;
     }
 
     function updateRoomField(idx, field, value) {

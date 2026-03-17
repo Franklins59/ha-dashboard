@@ -111,6 +111,25 @@ def energy_page():
     return render_template("energy.html")
 
 
+@app.route("/api/ha/service/<domain>/<service>", methods=["POST"])
+def ha_service(domain, service):
+    """Proxy: Call a Home Assistant service (e.g. utility_meter.reset)."""
+    try:
+        settings = load_json("settings.json")
+        ha = settings["ha"]
+        url = f"http://{ha['url']}:{ha['port']}/api/services/{domain}/{service}"
+        headers = {
+            "Authorization": f"Bearer {ha['token']}",
+            "Content-Type": "application/json"
+        }
+        data = request.get_json() or {}
+        resp = requests.post(url, headers=headers, json=data, timeout=10)
+        resp.raise_for_status()
+        return jsonify({"status": "ok"})
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
 @app.route("/api/ha/history")
 def ha_history():
     """Proxy: Fetch history data from Home Assistant."""

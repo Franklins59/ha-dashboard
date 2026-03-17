@@ -351,6 +351,23 @@
   font-size: 0.72rem;
 }
 
+.wiz-entity-name-input {
+  flex: 2;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.72rem;
+  font-family: inherit;
+  outline: none;
+  min-width: 0;
+}
+
+.wiz-entity-name-input:focus {
+  border-color: var(--accent);
+}
+
 /* --- Buttons --- */
 .wiz-btn {
   padding: 0.5rem 1rem;

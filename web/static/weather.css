@@ -70,6 +70,106 @@
   margin-top: 0.15rem;
 }
 
+/* --- Cumulative values (rain, sun) with period toggle --- */
+.wx-cumulative {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.wx-cum-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.wx-cum-btn {
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.wx-cum-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wx-cum-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #111;
+  font-weight: 600;
+}
+
+.wx-cum-cards {
+  display: flex;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+.wx-card-cum {
+  position: relative;
+  flex: 1;
+}
+
+.wx-reset-btn {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.wx-reset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-faint, rgba(61, 220, 132, 0.08));
+}
+
+.wx-reset-btn.success {
+  border-color: #3ddc84;
+  color: #3ddc84;
+}
+
+@media (max-width: 500px) {
+  .wx-cumulative {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wx-cum-periods {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .wx-cum-cards {
+    justify-content: center;
+  }
+}
+
 /* --- Indoor strip --- */
 .wx-indoor-strip {
   display: flex;
@@ -93,6 +193,12 @@
 .wx-indoor-item {
   color: var(--text);
   white-space: nowrap;
+}
+
+.wx-indoor-items {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
 }
 
 /* --- Charts --- */

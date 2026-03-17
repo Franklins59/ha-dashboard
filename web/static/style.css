@@ -408,6 +408,10 @@ body {
   background: var(--accent-cover-glow);
 }
 
+.device.cover-card[data-has-tilt="true"] {
+  cursor: pointer;
+}
+
 .cover-buttons {
   display: flex;
   gap: 0.3rem;
@@ -470,6 +474,87 @@ body {
   color: var(--text-dim);
   min-width: 2.2em;
   text-align: right;
+}
+
+/* Tilt / slat control */
+.cover-tilt {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, margin-top 0.25s ease, opacity 0.2s ease;
+  opacity: 0;
+  margin-top: 0;
+}
+
+.cover-tilt.expanded {
+  max-height: 4rem;
+  opacity: 1;
+  margin-top: 0.4rem;
+}
+
+.cover-tilt-label {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+
+.cover-tilt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cover-tilt-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  outline: none;
+}
+
+.cover-tilt-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-cover);
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.cover-tilt-slider::-webkit-slider-thumb:hover {
+  opacity: 1;
+}
+
+.cover-tilt-value {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  min-width: 2.2em;
+  text-align: right;
+}
+
+/* Larger slider thumbs and buttons on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .cover-pos-slider::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+  }
+  .cover-tilt-slider::-webkit-slider-thumb {
+    width: 20px;
+    height: 20px;
+  }
+  .cover-btn {
+    padding: 0.5rem 0;
+    font-size: 1rem;
+    min-height: 2.2rem;
+  }
+  .cover-tilt-row {
+    padding: 0.15rem 0;
+  }
 }
 
 /* --- Sensor --- */

@@ -30,7 +30,7 @@
 
   <!-- Content -->
   <div class="wx-content">
-    <!-- Current values -->
+    <!-- Instant values -->
     <div class="wx-current" id="wx-current">
       <div class="wx-card">
         <div class="wx-card-icon">🌡️</div>
@@ -53,29 +53,40 @@
         <div class="wx-card-label">Windrichtung</div>
       </div>
       <div class="wx-card">
-        <div class="wx-card-icon">🌧️</div>
-        <div class="wx-card-value" id="wx-rain">—</div>
-        <div class="wx-card-label">Regen gesamt</div>
-      </div>
-      <div class="wx-card">
-        <div class="wx-card-icon">☀️</div>
-        <div class="wx-card-value" id="wx-sun">—</div>
-        <div class="wx-card-label">Sonnenschein</div>
-      </div>
-      <div class="wx-card">
         <div class="wx-card-icon">💡</div>
         <div class="wx-card-value" id="wx-lux">—</div>
         <div class="wx-card-label">Helligkeit</div>
       </div>
     </div>
 
+    <!-- Cumulative values with period toggle -->
+    <div class="wx-cumulative">
+      <div class="wx-cum-periods">
+        <button class="wx-cum-btn active" data-period="daily" onclick="setCumPeriod('daily')">Heute</button>
+        <button class="wx-cum-btn" data-period="weekly" onclick="setCumPeriod('weekly')">Woche</button>
+        <button class="wx-cum-btn" data-period="monthly" onclick="setCumPeriod('monthly')">Monat</button>
+        <button class="wx-cum-btn" data-period="total" onclick="setCumPeriod('total')">Gesamt</button>
+      </div>
+      <div class="wx-cum-cards">
+        <div class="wx-card wx-card-cum">
+          <div class="wx-card-icon">🌧️</div>
+          <div class="wx-card-value" id="wx-rain">—</div>
+          <div class="wx-card-label" id="wx-rain-label">Niederschlag heute</div>
+          <button class="wx-reset-btn" id="reset-rain" onclick="resetMeters('rain')" title="Zähler zurücksetzen">↺</button>
+        </div>
+        <div class="wx-card wx-card-cum">
+          <div class="wx-card-icon">☀️</div>
+          <div class="wx-card-value" id="wx-sun">—</div>
+          <div class="wx-card-label" id="wx-sun-label">Sonnenschein heute</div>
+          <button class="wx-reset-btn" id="reset-sun" onclick="resetMeters('sun')" title="Zähler zurücksetzen">↺</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Indoor vs outdoor temp comparison -->
     <div class="wx-indoor-strip" id="wx-indoor">
       <span class="wx-indoor-label">Innen:</span>
-      <span class="wx-indoor-item" id="wx-in-wohnen">Wohnen —</span>
-      <span class="wx-indoor-item" id="wx-in-buero">Büro —</span>
-      <span class="wx-indoor-item" id="wx-in-schlafen">Schlafen —</span>
-      <span class="wx-indoor-item" id="wx-in-werkstatt">Werkstatt —</span>
+      <span class="wx-indoor-items" id="wx-indoor-items">—</span>
     </div>
 
     <!-- Charts -->
@@ -100,26 +111,113 @@
   </div>
 
   <script>
-    // === CONFIG ===
-    const ENTITIES = {
-      temp_out: "sensor.hmip_swo_pr_terrasse_temperatur",
-      humidity_out: "sensor.hmip_swo_pr_terrasse_luftfeuchtigkeit",
-      wind_speed: "sensor.hmip_swo_pr_terrasse_windgeschwindigkeit",
-      wind_dir: "sensor.hmip_swo_pr_terrasse_windrichtung",
-      wind_dir2: "sensor.hmip_swo_pr_terrasse_windrichtung_2",
-      rain: "sensor.hmip_swo_pr_terrasse_regenzahler_gesamt",
-      sun: "sensor.hmip_swo_pr_terrasse_sonnenscheindauer",
-      lux: "sensor.hmip_swo_pr_terrasse_beleuchtungsstarke",
-      temp_wohnen: "sensor.hmip_wth_2_wohnen_temperatur",
-      temp_buero: "sensor.hmip_wth_2_buro_temperatur",
-      temp_schlafen: "sensor.hmip_sthd_schlafen_temperatur",
-      temp_werkstatt: "sensor.hmip_sthd_werkstatt_temperatur",
-      hum_wohnen: "sensor.hmip_wth_2_wohnen_luftfeuchtigkeit",
-      hum_buero: "sensor.hmip_wth_2_buro_luftfeuchtigkeit"
+    // === STATE ===
+    let settings = null;
+    let weatherCfg = null;  // { room, utility_meters }
+    let outdoor = {};       // { temp, humidity, wind_speed, wind_dir, rain, sun, lux }
+    let indoorRooms = [];   // [{ name, temp_id, hum_id }]
+    let allEntities = [];
+    let currentRange = 24;
+    let currentPeriod = "daily";
+    let charts = {};
+
+    const PERIOD_LABELS = {
+      daily: "heute", weekly: "diese Woche", monthly: "diesen Monat", total: "gesamt"
     };
 
-    let currentRange = 24;
-    let charts = {};
+    const INDOOR_COLORS = ["#3ddc84", "#5ba8f5", "#a78bfa", "#f87171", "#fbbf24", "#f472b6", "#34d399", "#fb923c"];
+
+    // === AUTO-DETECT OUTDOOR SENSORS ===
+    // Finds a common prefix from sensor entities in the room, then searches
+    // all HA entities matching that prefix for weather-related sensors.
+    function detectOutdoorEntities(roomDevices, haEntities) {
+      const sensorIds = roomDevices
+        .filter(d => d.entity_id.startsWith("sensor."))
+        .map(d => d.entity_id);
+
+      if (sensorIds.length === 0) return {};
+
+      // Find common prefix among sensor entity_ids
+      let prefix = sensorIds[0];
+      for (const id of sensorIds.slice(1)) {
+        while (prefix.length > 0 && !id.startsWith(prefix)) {
+          prefix = prefix.substring(0, prefix.lastIndexOf("_"));
+        }
+      }
+
+      if (!prefix) return {};
+      console.log("[Weather] Device prefix:", prefix);
+
+      // Search all HA entities with this prefix
+      const matching = haEntities.filter(e => e.entity_id.startsWith(prefix + "_"));
+      console.log("[Weather] Matching entities:", matching.length);
+
+      const result = {};
+      const patterns = {
+        temp: ["temperatur", "temperature", "actual_temp"],
+        humidity: ["luftfeuchtigkeit", "humidity"],
+        wind_speed: ["windgeschwindigkeit", "wind_speed"],
+        wind_dir: ["windrichtung", "wind_dir"],
+        rain: ["regenzahler", "rain_counter"],
+        sun: ["sonnenscheindauer", "sunshineduration", "sunshine_duration"],
+        lux: ["beleuchtungsstarke", "illumination", "illuminance", "lux"]
+      };
+
+      for (const [key, keywords] of Object.entries(patterns)) {
+        // Find first matching entity (skip _2 variants for wind_dir)
+        const match = matching.find(e => {
+          const eid = e.entity_id.toLowerCase();
+          if (key === "wind_dir" && eid.endsWith("_2")) return false;
+          return keywords.some(kw => eid.includes(kw));
+        });
+        if (match) result[key] = match.entity_id;
+      }
+
+      return result;
+    }
+
+    // === AUTO-DETECT INDOOR SENSORS ===
+    // Scans all rooms (except weather room) for temperature sensors
+    function detectIndoorRooms(rooms, weatherRoomId) {
+      const result = [];
+      for (const room of rooms) {
+        if (room.id === weatherRoomId) continue;
+        if (!room.name || !room.devices) continue;
+
+        const tempDev = room.devices.find(d =>
+          d.entity_id.startsWith("sensor.") &&
+          (d.entity_id.includes("temperatur") || d.entity_id.includes("temperature"))
+        );
+        if (!tempDev) continue;
+
+        const humDev = room.devices.find(d =>
+          d.entity_id.startsWith("sensor.") &&
+          (d.entity_id.includes("luftfeuchtigkeit") || d.entity_id.includes("humidity"))
+        );
+
+        result.push({
+          name: room.name,
+          temp_id: tempDev.entity_id,
+          hum_id: humDev ? humDev.entity_id : null
+        });
+      }
+      return result;
+    }
+
+    // === UTILITY METER HELPERS ===
+    function getRainEntity() {
+      if (currentPeriod === "total") return outdoor.rain;
+      const um = weatherCfg.utility_meters || {};
+      const map = { daily: um.rain_daily, weekly: um.rain_weekly, monthly: um.rain_monthly };
+      return map[currentPeriod] || outdoor.rain;
+    }
+
+    function getSunEntity() {
+      if (currentPeriod === "total") return outdoor.sun;
+      const um = weatherCfg.utility_meters || {};
+      const map = { daily: um.sun_daily, weekly: um.sun_weekly, monthly: um.sun_monthly };
+      return map[currentPeriod] || outdoor.sun;
+    }
 
     // Wind direction number to compass
     function windDirLabel(deg) {
@@ -131,13 +229,10 @@
     // === THEME ===
     async function applyTheme() {
       let themeSetting = "auto";
-      // Check localStorage first (set by dashboard theme toggle)
       try {
         const stored = localStorage.getItem("fd-theme");
         if (stored) { themeSetting = stored; }
       } catch(e) {}
-
-      // Fall back to settings.json if no localStorage override
       if (themeSetting === "auto") {
         try {
           const res = await fetch("/api/settings");
@@ -145,7 +240,6 @@
           themeSetting = s.theme || "auto";
         } catch (e) {}
       }
-
       const h = new Date().getHours();
       const resolved = themeSetting === "auto" ? (h >= 7 && h < 20 ? "light" : "dark") : themeSetting;
       document.body.setAttribute("data-theme", resolved);
@@ -162,44 +256,54 @@
 
     // === CURRENT VALUES ===
     async function loadCurrentValues() {
+      if (!outdoor.temp) return;
       try {
         const res = await fetch("/api/ha/entities");
-        const entities = await res.json();
+        allEntities = await res.json();
         const val = (id) => {
-          const e = entities.find(x => x.entity_id === id);
-          return e ? e.state : null;
+          if (!id) return null;
+          const e = allEntities.find(x => x.entity_id === id);
+          return e && e.state !== "unavailable" && e.state !== "unknown" ? e.state : null;
         };
 
-        const temp = val(ENTITIES.temp_out);
+        // Outdoor values
+        const temp = val(outdoor.temp);
         document.getElementById("wx-temp").textContent = temp ? `${parseFloat(temp).toFixed(1)} °C` : "—";
 
-        const hum = val(ENTITIES.humidity_out);
+        const hum = val(outdoor.humidity);
         document.getElementById("wx-humidity").textContent = hum ? `${parseFloat(hum).toFixed(0)} %` : "—";
 
-        const wind = val(ENTITIES.wind_speed);
+        const wind = val(outdoor.wind_speed);
         document.getElementById("wx-wind").textContent = wind ? `${parseFloat(wind).toFixed(1)} km/h` : "—";
 
-        const wdir = val(ENTITIES.wind_dir);
+        const wdir = val(outdoor.wind_dir);
         document.getElementById("wx-wind-dir").textContent = windDirLabel(wdir);
 
-        const rain = val(ENTITIES.rain);
+        const rain = val(getRainEntity());
         document.getElementById("wx-rain").textContent = rain ? `${parseFloat(rain).toFixed(1)} mm` : "—";
+        document.getElementById("wx-rain-label").textContent = `Niederschlag ${PERIOD_LABELS[currentPeriod]}`;
 
-        const sun = val(ENTITIES.sun);
+        const sun = val(getSunEntity());
         document.getElementById("wx-sun").textContent = sun ? `${parseFloat(sun).toFixed(0)} min` : "—";
+        document.getElementById("wx-sun-label").textContent = `Sonnenschein ${PERIOD_LABELS[currentPeriod]}`;
 
-        const lux = val(ENTITIES.lux);
+        // Show/hide reset buttons
+        document.getElementById("reset-rain").style.display = currentPeriod === "total" ? "none" : "";
+        document.getElementById("reset-sun").style.display = currentPeriod === "total" ? "none" : "";
+
+        const lux = val(outdoor.lux);
         document.getElementById("wx-lux").textContent = lux ? `${parseFloat(lux).toFixed(0)} lx` : "—";
 
-        // Indoor temps
-        const tw = val(ENTITIES.temp_wohnen);
-        document.getElementById("wx-in-wohnen").textContent = `Wohnen ${tw ? parseFloat(tw).toFixed(1) + "°" : "—"}`;
-        const tb = val(ENTITIES.temp_buero);
-        document.getElementById("wx-in-buero").textContent = `Büro ${tb ? parseFloat(tb).toFixed(1) + "°" : "—"}`;
-        const ts = val(ENTITIES.temp_schlafen);
-        document.getElementById("wx-in-schlafen").textContent = `Schlafen ${ts ? parseFloat(ts).toFixed(1) + "°" : "—"}`;
-        const tkw = val(ENTITIES.temp_werkstatt);
-        document.getElementById("wx-in-werkstatt").textContent = `Werkstatt ${tkw ? parseFloat(tkw).toFixed(1) + "°" : "—"}`;
+        // Indoor temps (dynamic)
+        const container = document.getElementById("wx-indoor-items");
+        if (indoorRooms.length === 0) {
+          container.textContent = "—";
+        } else {
+          container.innerHTML = indoorRooms.map(r => {
+            const t = val(r.temp_id);
+            return `<span class="wx-indoor-item">${r.name} ${t ? parseFloat(t).toFixed(1) + "°" : "—"}</span>`;
+          }).join("");
+        }
       } catch (e) {
         console.error("Failed to load current values:", e);
       }
@@ -212,14 +316,9 @@
         grid: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
         text: isDark ? "#888" : "#666",
         tempOut: "#f59e0b",
-        tempWohnen: "#3ddc84",
-        tempBuero: "#5ba8f5",
-        tempSchlafen: "#a78bfa",
-        tempWerkstatt: "#f87171",
         humidity: "#5ba8f5",
         humIn: "#3ddc84",
         wind: "#60a5fa",
-        windGust: "#f87171",
         rain: "#38bdf8"
       };
     }
@@ -257,16 +356,12 @@
           x: {
             type: "linear",
             ticks: {
-              color: colors.text,
-              font: { size: 10 },
-              maxTicksLimit: 8,
+              color: colors.text, font: { size: 10 }, maxTicksLimit: 8,
               callback: function(val) {
                 const d = new Date(val);
                 const h = d.getHours().toString().padStart(2, "0");
                 const m = d.getMinutes().toString().padStart(2, "0");
-                if (currentRange > 48) {
-                  return d.getDate() + "." + (d.getMonth() + 1) + ". " + h + ":" + m;
-                }
+                if (currentRange > 48) return d.getDate() + "." + (d.getMonth() + 1) + ". " + h + ":" + m;
                 return h + ":" + m;
               }
             },
@@ -294,84 +389,63 @@
     }
 
     async function loadCharts() {
-      const allIds = [
-        ENTITIES.temp_out, ENTITIES.humidity_out, ENTITIES.wind_speed,
-        ENTITIES.rain, ENTITIES.temp_wohnen, ENTITIES.temp_buero,
-        ENTITIES.temp_schlafen, ENTITIES.temp_werkstatt,
-        ENTITIES.hum_wohnen, ENTITIES.hum_buero
-      ].join(",");
+      if (!outdoor.temp) return;
+
+      // Collect all entity IDs for history
+      const ids = [
+        outdoor.temp, outdoor.humidity, outdoor.wind_speed, outdoor.rain,
+        ...indoorRooms.map(r => r.temp_id),
+        ...indoorRooms.filter(r => r.hum_id).map(r => r.hum_id)
+      ].filter(Boolean).join(",");
 
       try {
-        console.log("Fetching history for", currentRange, "hours...");
-        const res = await fetch(`/api/ha/history?entity_ids=${allIds}&hours=${currentRange}`);
+        const res = await fetch(`/api/ha/history?entity_ids=${ids}&hours=${currentRange}`);
         const history = await res.json();
-
-        if (history.error) {
-          console.error("History API error:", history.error);
-          return;
-        }
-
-        console.log("History response: arrays=" + history.length);
-        history.forEach((arr, i) => {
-          if (arr.length > 0) console.log("  " + arr[0].entity_id + ": " + arr.length + " points");
-        });
+        if (history.error) { console.error("History API error:", history.error); return; }
 
         const c = getChartColors();
-
-        // Destroy old charts
         Object.values(charts).forEach(ch => ch.destroy());
         charts = {};
 
-        const tempOutData = parseHistory(history, ENTITIES.temp_out);
-        console.log("Parsed temp_out:", tempOutData.length, "points");
-
-        // Temperature chart
+        // Temperature chart: outdoor + all indoor rooms
+        const tempDatasets = [
+          makeDataset("Aussen", parseHistory(history, outdoor.temp), c.tempOut)
+        ];
+        indoorRooms.forEach((r, i) => {
+          tempDatasets.push(
+            makeDataset(r.name, parseHistory(history, r.temp_id), INDOOR_COLORS[i % INDOOR_COLORS.length])
+          );
+        });
         charts.temp = new Chart(document.getElementById("chart-temp"), {
-          type: "line",
-          data: {
-            datasets: [
-              makeDataset("Aussen", tempOutData, c.tempOut),
-              makeDataset("Wohnen", parseHistory(history, ENTITIES.temp_wohnen), c.tempWohnen),
-              makeDataset("Büro", parseHistory(history, ENTITIES.temp_buero), c.tempBuero),
-              makeDataset("Schlafen", parseHistory(history, ENTITIES.temp_schlafen), c.tempSchlafen),
-              makeDataset("Werkstatt", parseHistory(history, ENTITIES.temp_werkstatt), c.tempWerkstatt)
-            ]
-          },
-          options: chartOptions("°C", c)
+          type: "line", data: { datasets: tempDatasets }, options: chartOptions("°C", c)
         });
 
-        // Humidity chart
+        // Humidity chart: outdoor + indoor rooms that have humidity
+        const humDatasets = [
+          makeDataset("Aussen", parseHistory(history, outdoor.humidity), c.humidity)
+        ];
+        indoorRooms.forEach((r, i) => {
+          if (r.hum_id) {
+            humDatasets.push(
+              makeDataset(r.name, parseHistory(history, r.hum_id), INDOOR_COLORS[i % INDOOR_COLORS.length])
+            );
+          }
+        });
         charts.humidity = new Chart(document.getElementById("chart-humidity"), {
-          type: "line",
-          data: {
-            datasets: [
-              makeDataset("Aussen", parseHistory(history, ENTITIES.humidity_out), c.humidity),
-              makeDataset("Wohnen", parseHistory(history, ENTITIES.hum_wohnen), c.humIn),
-              makeDataset("Büro", parseHistory(history, ENTITIES.hum_buero), c.tempBuero)
-            ]
-          },
-          options: chartOptions("%", c)
+          type: "line", data: { datasets: humDatasets }, options: chartOptions("%", c)
         });
 
         // Wind chart
         charts.wind = new Chart(document.getElementById("chart-wind"), {
           type: "line",
-          data: {
-            datasets: [
-              makeDataset("Geschwindigkeit", parseHistory(history, ENTITIES.wind_speed), c.wind, true)
-            ]
-          },
+          data: { datasets: [makeDataset("Geschwindigkeit", parseHistory(history, outdoor.wind_speed), c.wind, true)] },
           options: chartOptions("km/h", c)
         });
 
         // Rain chart
         charts.rain = new Chart(document.getElementById("chart-rain"), {
           type: "line",
-          data: {
-            datasets: [
-              makeDataset("Niederschlag", parseHistory(history, ENTITIES.rain), c.rain, true)
-            ]
-          },
+          data: { datasets: [makeDataset("Niederschlag", parseHistory(history, outdoor.rain), c.rain, true)] },
           options: chartOptions("mm", c)
         });
 
@@ -388,12 +462,91 @@
       loadCharts();
     }
 
+    // === CUMULATIVE PERIOD + RESET ===
+    function setCumPeriod(period) {
+      currentPeriod = period;
+      document.querySelectorAll(".wx-cum-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.period === period);
+      });
+      loadCurrentValues();
+    }
+
+    async function resetMeters(type) {
+      const labels = { rain: "Niederschlag", sun: "Sonnenschein" };
+      const periodLabel = PERIOD_LABELS[currentPeriod];
+      if (!confirm(`${labels[type]} (${periodLabel}) wirklich zurücksetzen?`)) return;
+
+      const entityId = type === "rain" ? getRainEntity() : getSunEntity();
+      try {
+        const res = await fetch("/api/ha/service/utility_meter/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entity_id: entityId })
+        });
+        const result = await res.json();
+        if (result.status === "ok") {
+          const btn = document.getElementById(`reset-${type}`);
+          btn.textContent = "✓";
+          btn.classList.add("success");
+          setTimeout(() => { btn.textContent = "↺"; btn.classList.remove("success"); }, 1500);
+          loadCurrentValues();
+        } else {
+          alert("Fehler: " + (result.error || "unbekannt"));
+        }
+      } catch (e) {
+        alert("Fehler: " + e.message);
+      }
+    }
+
     // === INIT ===
     async function init() {
       await applyTheme();
+
+      try {
+        const [settingsRes, configRes, entitiesRes] = await Promise.all([
+          fetch("/api/settings"),
+          fetch("/api/config"),
+          fetch("/api/ha/entities")
+        ]);
+        settings = await settingsRes.json();
+        const config = await configRes.json();
+        const haEntities = await entitiesRes.json();
+
+        weatherCfg = settings.weather;
+        if (!weatherCfg || !weatherCfg.room) {
+          document.querySelector(".wx-content").innerHTML =
+            '<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Wetterkonfiguration gefunden.<br><br>Bitte in Einstellungen unter "Wetter" einen Raum zuweisen.</div>';
+          return;
+        }
+
+        // Find weather room in config
+        const room = config.rooms.find(r => r.id === weatherCfg.room);
+        if (!room) {
+          document.querySelector(".wx-content").innerHTML =
+            `<div style="text-align:center;padding:3rem;color:var(--text-dim)">Raum "${weatherCfg.room}" nicht in config.json gefunden.</div>`;
+          return;
+        }
+
+        // Auto-detect outdoor entities via device prefix
+        outdoor = detectOutdoorEntities(room.devices, haEntities);
+        if (!outdoor.temp) {
+          document.querySelector(".wx-content").innerHTML =
+            `<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Wetter-Entities im Raum "${room.name}" erkannt.<br>Mindestens ein Temperatur-Sensor muss vorhanden sein.</div>`;
+          return;
+        }
+        console.log("[Weather] Outdoor entities:", outdoor);
+
+        // Auto-detect indoor rooms
+        indoorRooms = detectIndoorRooms(config.rooms, weatherCfg.room);
+        console.log("[Weather] Indoor rooms:", indoorRooms.length);
+
+      } catch (e) {
+        console.error("Failed to load config:", e);
+        return;
+      }
+
       await loadCurrentValues();
       await loadCharts();
-      // Refresh current values every 60s
       setInterval(loadCurrentValues, 60000);
     }
 

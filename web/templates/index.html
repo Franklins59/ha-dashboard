@@ -30,13 +30,13 @@
       <div class="header-building" id="building-name"></div>
     </div>
     <div class="header-right">
-      <span class="header-clock" id="clock"></span>
-      <button class="theme-toggle" id="edit-toggle" title="Anordnung bearbeiten" onclick="toggleEditMode()">✏️</button>
-      <button class="edit-save-btn hidden" id="edit-save-btn" onclick="saveEditMode()">💾 Speichern</button>
-      <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
       <a href="/weather" class="theme-toggle" title="Wetterstation">🌤️</a>
       <a href="/energy" class="theme-toggle" title="Energie">⚡</a>
+      <button class="theme-toggle" id="theme-toggle" title="Theme wechseln">☀️</button>
       <a href="/settings" class="theme-toggle" title="Einstellungen">⚙️</a>
+      <button class="theme-toggle" id="edit-toggle" title="Anordnung bearbeiten" onclick="toggleEditMode()">✏️</button>
+      <button class="edit-save-btn hidden" id="edit-save-btn" onclick="saveEditMode()">💾 Speichern</button>
+      <span class="header-clock" id="clock"></span>
       <div class="status-bar">
         <span id="status-text">Getrennt</span>
         <div class="status-dot" id="status-dot"></div>
@@ -378,6 +378,13 @@
           <input type="range" class="cover-pos-slider" min="0" max="100" value="0">
           <span class="cover-pos-value">—</span>
         </div>
+        <div class="cover-tilt" style="display:none">
+          <div class="cover-tilt-label">Lamellen</div>
+          <div class="cover-tilt-row">
+            <input type="range" class="cover-tilt-slider" min="0" max="100" value="0">
+            <span class="cover-tilt-value">—</span>
+          </div>
+        </div>
       `;
 
       card.querySelectorAll(".cover-btn").forEach(btn => {
@@ -393,6 +400,26 @@
       });
       slider.addEventListener("input", (e) => {
         card.querySelector(".cover-pos-value").textContent = e.target.value + "%";
+      });
+
+      // Tilt slider events
+      const tiltSlider = card.querySelector(".cover-tilt-slider");
+      tiltSlider.addEventListener("change", (e) => {
+        setCoverTiltPosition(dev.entity_id, parseInt(e.target.value));
+      });
+      tiltSlider.addEventListener("input", (e) => {
+        card.querySelector(".cover-tilt-value").textContent = e.target.value + "%";
+      });
+      tiltSlider.addEventListener("click", (e) => e.stopPropagation());
+
+      // Click on card toggles tilt panel (if tilt available)
+      card.addEventListener("click", (e) => {
+        if (editMode) return;
+        if (e.target.closest(".cover-btn") || e.target.classList.contains("cover-pos-slider")) return;
+        const tiltEl = card.querySelector(".cover-tilt");
+        if (tiltEl && card.dataset.hasTilt === "true") {
+          tiltEl.classList.toggle("expanded");
+        }
       });
 
       return card;
@@ -617,6 +644,11 @@
       callService("cover", "set_cover_position", entityId, { position });
     }
 
+    function setCoverTiltPosition(entityId, tiltPosition) {
+      if (editMode) return;
+      callService("cover", "set_cover_tilt_position", entityId, { tilt_position: tiltPosition });
+    }
+
     function callService(domain, service, entityId, data) {
       const msg = { id: msgId++, type: "call_service", domain, service, target: { entity_id: entityId } };
       if (data) msg.service_data = data;
@@ -679,6 +711,15 @@
       if (pos !== undefined && pos !== null) {
         card.querySelector(".cover-pos-slider").value = pos;
         card.querySelector(".cover-pos-value").textContent = pos + "%";
+      }
+
+      // Auto-detect tilt support
+      const tiltEl = card.querySelector(".cover-tilt");
+      if (tiltEl && attrs.current_tilt_position !== undefined && attrs.current_tilt_position !== null) {
+        card.dataset.hasTilt = "true";
+        tiltEl.style.display = "";
+        card.querySelector(".cover-tilt-slider").value = attrs.current_tilt_position;
+        card.querySelector(".cover-tilt-value").textContent = attrs.current_tilt_position + "%";
       }
     }
 
