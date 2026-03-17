@@ -74,6 +74,31 @@
           </select>
         </div>
       </div>
+      <div class="panel-section">
+        <h3>Energie (3EM)</h3>
+        <div class="form-row">
+          <label>Raum mit 3EM-Entities</label>
+          <select id="s-energy-room">
+            <option value="">— Nicht konfiguriert —</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Max. Phasenleistung (W)</label>
+          <input type="number" id="s-energy-max" placeholder="3680" value="3680">
+        </div>
+        <div class="energy-invert-section" id="energy-invert-section" style="display:none">
+          <p class="hint" style="margin-bottom:0.4rem">Sensoren invertieren (bei verkehrt montierten Stromzangen):</p>
+          <div class="form-row">
+            <label><input type="checkbox" id="s-invert-a"> Phase A invertieren</label>
+          </div>
+          <div class="form-row">
+            <label><input type="checkbox" id="s-invert-b"> Phase B invertieren</label>
+          </div>
+          <div class="form-row">
+            <label><input type="checkbox" id="s-invert-c"> Phase C invertieren</label>
+          </div>
+        </div>
+      </div>
       <div class="panel-actions">
         <button class="btn btn-primary" onclick="saveSettings()">Speichern</button>
         <span class="save-result" id="settings-save-result"></span>
@@ -122,25 +147,58 @@
     // === SYSTEM SETTINGS ===
     async function loadSettings() {
       try {
-        const res = await fetch("/api/settings");
-        const s = await res.json();
+        const [settingsRes, configRes] = await Promise.all([
+          fetch("/api/settings"),
+          fetch("/api/config")
+        ]);
+        const s = await settingsRes.json();
+        const config = await configRes.json();
+
         document.getElementById("s-building").value = s.building || "";
         document.getElementById("s-ha-url").value = s.ha?.url || "";
         document.getElementById("s-ha-port").value = s.ha?.port || 8123;
         document.getElementById("s-ha-token").value = s.ha?.token || "";
         document.getElementById("s-theme").value = s.theme || "auto";
+
+        // Populate energy room dropdown
+        const roomSelect = document.getElementById("s-energy-room");
+        roomSelect.innerHTML = '<option value="">— Nicht konfiguriert —</option>';
+        for (const room of config.rooms) {
+          const opt = document.createElement("option");
+          opt.value = room.id;
+          opt.textContent = `${room.icon || ""} ${room.name} (${room.devices.length} Geräte)`;
+          roomSelect.appendChild(opt);
+        }
+
+        // Load energy config
+        const energy = s.energy || {};
+        if (energy.room) roomSelect.value = energy.room;
+        document.getElementById("s-energy-max").value = energy.max_phase_power || 3680;
+        const invertFlags = energy.invert || [false, false, false];
+        document.getElementById("s-invert-a").checked = invertFlags[0] || false;
+        document.getElementById("s-invert-b").checked = invertFlags[1] || false;
+        document.getElementById("s-invert-c").checked = invertFlags[2] || false;
+        updateInvertVisibility();
+
         setStatus(true);
       } catch (e) {
         setStatus(false);
       }
     }
 
+    function updateInvertVisibility() {
+      const roomSelected = document.getElementById("s-energy-room").value;
+      document.getElementById("energy-invert-section").style.display = roomSelected ? "block" : "none";
+    }
+
+    document.getElementById("s-energy-room").addEventListener("change", updateInvertVisibility);
+
     async function saveSettings() {
       try {
-        // Load existing settings first to preserve energy config etc.
+        // Load existing settings first
         const existing = await (await fetch("/api/settings")).json();
 
-        // Merge UI fields on top
+        // Merge UI fields
         existing.building = document.getElementById("s-building").value;
         existing.ha = {
           url: document.getElementById("s-ha-url").value,
@@ -148,6 +206,22 @@
           token: document.getElementById("s-ha-token").value
         };
         existing.theme = document.getElementById("s-theme").value;
+
+        // Energy config
+        const energyRoom = document.getElementById("s-energy-room").value;
+        if (energyRoom) {
+          existing.energy = {
+            room: energyRoom,
+            invert: [
+              document.getElementById("s-invert-a").checked,
+              document.getElementById("s-invert-b").checked,
+              document.getElementById("s-invert-c").checked
+            ],
+            max_phase_power: parseInt(document.getElementById("s-energy-max").value) || 3680
+          };
+        } else {
+          delete existing.energy;
+        }
 
         const res = await fetch("/api/settings", {
           method: "POST",

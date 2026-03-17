@@ -82,13 +82,53 @@
 
   <script>
     // === STATE ===
-    let energyConfig = null;
+    let settings = null;
+    let energyCfg = null;   // { room, invert, max_phase_power }
+    let detected = null;    // { total, phases: [{name, power, voltage, current}] }
     let allEntities = [];
     let currentRange = 24;
     let powerChart = null;
 
     const PHASE_COLORS = ["#3ddc84", "#5ba8f5", "#f87171"];
     const PHASE_CSS = ["", "phase-b", "phase-c"];
+
+    // Auto-detect 3EM entities from a room's devices
+    function detectPhases(devices) {
+      let total = null;
+      const phaseMap = {}; // { "a": { power, voltage, current, name } }
+
+      for (const dev of devices) {
+        const eid = dev.entity_id.toLowerCase();
+
+        // Total power
+        if (eid.includes("gesamt") || eid.includes("total_power") || eid.includes("_total")) {
+          if (eid.includes("power") || eid.includes("leistung") || eid.includes("gesamt")) {
+            total = dev.entity_id;
+          }
+        }
+
+        // Phase detection: look for phase_a, phase_b, phase_c
+        const phaseMatch = eid.match(/phase[_\s]?([abc])/);
+        if (phaseMatch) {
+          const letter = phaseMatch[1];
+          if (!phaseMap[letter]) phaseMap[letter] = { name: "Phase " + letter.toUpperCase() };
+
+          if (eid.includes("power") || eid.includes("leistung")) {
+            phaseMap[letter].power = dev.entity_id;
+          } else if (eid.includes("voltage") || eid.includes("spannung")) {
+            phaseMap[letter].voltage = dev.entity_id;
+          } else if (eid.includes("current") || eid.includes("strom")) {
+            phaseMap[letter].current = dev.entity_id;
+          }
+        }
+      }
+
+      const phases = ["a", "b", "c"]
+        .filter(l => phaseMap[l] && phaseMap[l].power)
+        .map(l => phaseMap[l]);
+
+      return { total, phases };
+    }
 
     // === THEME ===
     async function applyTheme() {
@@ -117,7 +157,7 @@
 
     // === LIVE VALUES ===
     async function loadLiveValues() {
-      if (!energyConfig) return;
+      if (!detected) return;
       try {
         const res = await fetch("/api/ha/entities");
         allEntities = await res.json();
@@ -126,36 +166,36 @@
           return e && e.state !== "unavailable" && e.state !== "unknown" ? parseFloat(e.state) : null;
         };
 
+        const invertFlags = energyCfg.invert || [];
+        const maxPower = energyCfg.max_phase_power || 3680;
+
         // Total power
-        const total = val(energyConfig.total);
+        const total = detected.total ? val(detected.total) : null;
         document.getElementById("nrg-total").textContent =
           total !== null ? Math.round(Math.abs(total)).toLocaleString("de-CH") : "—";
 
-        // Phases from config
+        // Phases
         const phaseIds = ["a", "b", "c"];
-        const phases = energyConfig.phases || [];
-        const maxPower = energyConfig.max_phase_power || 3680;
         for (let i = 0; i < phaseIds.length; i++) {
-          const phase = phases[i];
+          const phase = detected.phases[i];
           if (!phase) { updatePhase(phaseIds[i], null, null, null, false, maxPower); continue; }
           updatePhase(
             phaseIds[i],
             val(phase.power),
-            val(phase.voltage),
-            val(phase.current),
-            phase.invert || false,
+            phase.voltage ? val(phase.voltage) : null,
+            phase.current ? val(phase.current) : null,
+            invertFlags[i] || false,
             maxPower
           );
-          // Update phase label if configured
           const labelEl = document.querySelector(`#nrg-bar-${phaseIds[i]}`)?.closest(".nrg-phase")?.querySelector(".nrg-phase-label");
           if (labelEl && phase.name) labelEl.textContent = phase.name;
         }
 
-        // Auto-detect consumers: all *_power or *_leistung entities
+        // Auto-detect consumers
         const consumers = [];
-        // Build exclusion set: all configured energy entities
-        const excludeIds = new Set([energyConfig.total]);
-        for (const p of phases) {
+        const excludeIds = new Set();
+        if (detected.total) excludeIds.add(detected.total);
+        for (const p of detected.phases) {
           if (p.power) excludeIds.add(p.power);
           if (p.voltage) excludeIds.add(p.voltage);
           if (p.current) excludeIds.add(p.current);
@@ -163,7 +203,6 @@
         for (const e of allEntities) {
           if (e.domain !== "sensor") continue;
           if (!e.entity_id.endsWith("_power") && !e.entity_id.endsWith("_leistung")) continue;
-          // Skip all 3EM / energy meter entities
           if (excludeIds.has(e.entity_id)) continue;
           if (e.entity_id.includes("3em") || e.entity_id.includes("shellyem3")) continue;
           const power = parseFloat(e.state);
@@ -244,9 +283,9 @@
     }
 
     async function loadChart() {
-      if (!energyConfig) return;
-      const phases = energyConfig.phases || [];
-      const ids = [energyConfig.total, ...phases.map(p => p.power)].filter(Boolean).join(",");
+      if (!detected) return;
+      const invertFlags = energyCfg.invert || [];
+      const ids = [detected.total, ...detected.phases.map(p => p.power)].filter(Boolean).join(",");
 
       try {
         const res = await fetch(`/api/ha/history?entity_ids=${ids}&hours=${currentRange}`);
@@ -258,16 +297,16 @@
 
         const datasets = [
           {
-            label: "Gesamt", data: parseHistory(history, energyConfig.total, false),
+            label: "Gesamt", data: parseHistory(history, detected.total, false),
             borderColor: c.total, backgroundColor: c.total + "15",
             fill: true, borderWidth: 1.5, pointRadius: 0, tension: 0.3
           }
         ];
 
-        phases.forEach((phase, i) => {
+        detected.phases.forEach((phase, i) => {
           datasets.push({
             label: phase.name || `Phase ${i+1}`,
-            data: parseHistory(history, phase.power, phase.invert || false),
+            data: parseHistory(history, phase.power, invertFlags[i] || false),
             borderColor: PHASE_COLORS[i] || "#999",
             borderWidth: 1, pointRadius: 0, tension: 0.3
           });
@@ -336,18 +375,41 @@
     async function init() {
       await applyTheme();
 
-      // Load energy config from settings
+      // Load settings + config
       try {
-        const res = await fetch("/api/settings");
-        const settings = await res.json();
-        energyConfig = settings.energy;
-        if (!energyConfig) {
+        const [settingsRes, configRes] = await Promise.all([
+          fetch("/api/settings"),
+          fetch("/api/config")
+        ]);
+        settings = await settingsRes.json();
+        const config = await configRes.json();
+
+        energyCfg = settings.energy;
+        if (!energyCfg || !energyCfg.room) {
           document.querySelector(".nrg-content").innerHTML =
-            '<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Energiekonfiguration in settings.json gefunden.<br><br>Bitte <code>"energy": { ... }</code> Block hinzufügen.</div>';
+            '<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Energiekonfiguration gefunden.<br><br>Bitte in Einstellungen unter "Energie" einen Raum mit 3EM-Entities zuweisen.</div>';
           return;
         }
+
+        // Find the energy room in config
+        const room = config.rooms.find(r => r.id === energyCfg.room);
+        if (!room) {
+          document.querySelector(".nrg-content").innerHTML =
+            `<div style="text-align:center;padding:3rem;color:var(--text-dim)">Raum "${energyCfg.room}" nicht in config.json gefunden.</div>`;
+          return;
+        }
+
+        // Auto-detect phases from room devices
+        detected = detectPhases(room.devices);
+        if (detected.phases.length === 0) {
+          document.querySelector(".nrg-content").innerHTML =
+            `<div style="text-align:center;padding:3rem;color:var(--text-dim)">Keine Phasen-Entities im Raum "${room.name}" erkannt.<br>Entities müssen "phase_a/b/c" und "power/voltage/current" im Namen enthalten.</div>`;
+          return;
+        }
+
+        console.log("[Energy] Detected:", detected);
       } catch(e) {
-        console.error("Failed to load settings:", e);
+        console.error("Failed to load config:", e);
         return;
       }
 

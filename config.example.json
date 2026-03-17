@@ -53,6 +53,23 @@
         { "entity_id": "input_boolean.example_simulation", "name": "Anwesenheit", "type": "input_boolean" },
         { "entity_id": "automation.example_alarm", "name": "Türüberwachung", "type": "automation" }
       ]
+    },
+    {
+      "id": "elektroverteiler",
+      "name": "Elektroverteiler",
+      "icon": "⚡",
+      "devices": [
+        { "entity_id": "sensor.example_3em_total_power", "name": "Gesamtleistung", "type": "sensor", "unit": "W" },
+        { "entity_id": "sensor.example_3em_phase_a_power", "name": "Phase A Leistung", "type": "sensor", "unit": "W" },
+        { "entity_id": "sensor.example_3em_phase_a_voltage", "name": "Phase A Spannung", "type": "sensor", "unit": "V" },
+        { "entity_id": "sensor.example_3em_phase_a_current", "name": "Phase A Strom", "type": "sensor", "unit": "A" },
+        { "entity_id": "sensor.example_3em_phase_b_power", "name": "Phase B Leistung", "type": "sensor", "unit": "W" },
+        { "entity_id": "sensor.example_3em_phase_b_voltage", "name": "Phase B Spannung", "type": "sensor", "unit": "V" },
+        { "entity_id": "sensor.example_3em_phase_b_current", "name": "Phase B Strom", "type": "sensor", "unit": "A" },
+        { "entity_id": "sensor.example_3em_phase_c_power", "name": "Phase C Leistung", "type": "sensor", "unit": "W" },
+        { "entity_id": "sensor.example_3em_phase_c_voltage", "name": "Phase C Spannung", "type": "sensor", "unit": "V" },
+        { "entity_id": "sensor.example_3em_phase_c_current", "name": "Phase C Strom", "type": "sensor", "unit": "A" }
+      ]
     }
   ]
 }
