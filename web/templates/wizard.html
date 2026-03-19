@@ -161,7 +161,11 @@
     const ROOM_ICONS = ["🛋️", "🍳", "🍽️", "🛏️", "🛁", "🚿", "🖥️", "📚", "🔧", "🚪", "🪜", "👔", "🗄️", "☀️", "⚡", "🎬", "🚶", "🏠"];
 
     // === THEME ===
+    let sunState = null;
+
     function getAutoTheme() {
+      if (sunState === "above_horizon") return "light";
+      if (sunState === "below_horizon") return "dark";
       const h = new Date().getHours();
       return (h >= 7 && h < 20) ? "light" : "dark";
     }
@@ -177,6 +181,14 @@
         } catch (e) {
           themeSetting = "light";
         }
+      }
+      if (themeSetting === "auto") {
+        try {
+          const res = await fetch("/api/ha/entities");
+          const entities = await res.json();
+          const sun = entities.find(e => e.entity_id === "sun.sun");
+          if (sun) sunState = sun.state;
+        } catch(e) {}
       }
       document.body.dataset.theme = themeSetting === "auto" ? getAutoTheme() : themeSetting;
     }

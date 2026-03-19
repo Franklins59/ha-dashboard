@@ -240,8 +240,19 @@
           themeSetting = s.theme || "auto";
         } catch (e) {}
       }
-      const h = new Date().getHours();
-      const resolved = themeSetting === "auto" ? (h >= 7 && h < 20 ? "light" : "dark") : themeSetting;
+      let resolved = themeSetting;
+      if (themeSetting === "auto") {
+        try {
+          const res = await fetch("/api/ha/entities");
+          const entities = await res.json();
+          const sun = entities.find(e => e.entity_id === "sun.sun");
+          if (sun) resolved = sun.state === "above_horizon" ? "light" : "dark";
+          else throw new Error();
+        } catch(e) {
+          const h = new Date().getHours();
+          resolved = (h >= 7 && h < 20) ? "light" : "dark";
+        }
+      }
       document.body.setAttribute("data-theme", resolved);
     }
 

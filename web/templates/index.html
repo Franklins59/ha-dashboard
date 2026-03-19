@@ -116,7 +116,21 @@
     };
 
     // === THEME ===
+    let sunState = null; // "above_horizon" or "below_horizon"
+
+    async function fetchSunState() {
+      try {
+        const res = await fetch("/api/ha/entities");
+        const entities = await res.json();
+        const sun = entities.find(e => e.entity_id === "sun.sun");
+        if (sun) sunState = sun.state;
+      } catch(e) {}
+    }
+
     function getAutoTheme() {
+      if (sunState === "above_horizon") return "light";
+      if (sunState === "below_horizon") return "dark";
+      // Fallback if sun.sun unavailable
       const h = new Date().getHours();
       return (h >= 7 && h < 20) ? "light" : "dark";
     }
@@ -146,8 +160,8 @@
     }
 
     document.getElementById("theme-toggle").addEventListener("click", cycleTheme);
-    setInterval(applyTheme, 60000);
-    applyTheme();
+    fetchSunState().then(() => applyTheme());
+    setInterval(() => { fetchSunState().then(() => applyTheme()); }, 60000);
 
     // === CLOCK ===
     function updateClock() {
@@ -598,6 +612,8 @@
             entityStates[d.entity_id] = d.new_state.state;
             entityAttrs[d.entity_id] = d.new_state.attributes || {};
             updateDeviceUI(d.entity_id, d.new_state.state, d.new_state.attributes);
+            // Update theme on sunrise/sunset
+            if (d.entity_id === "sun.sun") { sunState = d.new_state.state; applyTheme(); }
           }
           break;
       }

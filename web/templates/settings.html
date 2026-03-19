@@ -403,7 +403,20 @@
     }
 
     // === THEME ===
+    let sunState = null;
+
+    async function fetchSunState() {
+      try {
+        const res = await fetch("/api/ha/entities");
+        const entities = await res.json();
+        const sun = entities.find(e => e.entity_id === "sun.sun");
+        if (sun) sunState = sun.state;
+      } catch(e) {}
+    }
+
     function getAutoTheme() {
+      if (sunState === "above_horizon") return "light";
+      if (sunState === "below_horizon") return "dark";
       const h = new Date().getHours();
       return (h >= 7 && h < 20) ? "light" : "dark";
     }
@@ -415,8 +428,8 @@
     }
 
     // === INIT ===
-    loadSettings().then(() => {
-      // Check localStorage first
+    loadSettings().then(async () => {
+      await fetchSunState();
       let theme = null;
       try { theme = localStorage.getItem("fd-theme"); } catch(e) {}
       if (!theme) theme = document.getElementById("s-theme").value || "auto";
